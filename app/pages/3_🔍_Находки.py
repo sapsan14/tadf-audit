@@ -34,11 +34,51 @@ audit = get_current()
 scope = audit.id or "new"
 llm_on = llm_available()
 
+# Persistent error slot — errors survive st.rerun() and stay visible until the
+# user dismisses them. Without this, an exception inside an LLM call flashes
+# for one frame and disappears.
+ERROR_KEY = f"_ai_error_{scope}"
+if ERROR_KEY in st.session_state:
+    err_msg = st.session_state[ERROR_KEY]
+    with st.container(border=True):
+        if "credit balance" in err_msg.lower():
+            st.error(
+                "💳 Недостаточно средств на счёте Anthropic API. "
+                "Пополните баланс на https://console.anthropic.com → Plans & Billing."
+            )
+            with st.expander("Подробности ошибки"):
+                st.code(err_msg, language=None)
+        else:
+            st.error(f"🤖❌ Ошибка ИИ: {err_msg}")
+        if st.button("Закрыть", key=f"close_err_{scope}"):
+            del st.session_state[ERROR_KEY]
+            st.rerun()
+
+
+def _record_error(prefix: str, e: Exception) -> None:
+    """Stash the error in session_state so it survives the next st.rerun()."""
+    st.session_state[ERROR_KEY] = f"{prefix}: {type(e).__name__}: {e}"
+
+
+def _clear_error() -> None:
+    st.session_state.pop(ERROR_KEY, None)
+
 if not llm_on:
     st.info(
         "💡 ИИ-помощник (черновики, polish, ссылки на закон) сейчас выключен — "
         "нет ключа Anthropic. Можно работать вручную; ИИ-кнопки появятся, "
         "когда ключ будет настроен (см. README → ANTHROPIC_API_KEY)."
+    )
+else:
+    st.info(
+        "🤖 **Где находится ИИ-помощник:**\n"
+        "- ✨ **Черновик из тезисов** — в раскрывающемся блоке ниже\n"
+        "- ✏️ **Polish текста** — внутри каждой существующей находки (раскройте её)\n"
+        "- 💡 **Подобрать ссылки на закон** — там же, внутри находки\n"
+        "- 🤖 **Подпись к фото** — на странице «Фото»\n\n"
+        "Все ответы ИИ показываются с кнопками «Принять / Отклонить» — без вашего "
+        "согласия ничего в отчёт не попадает. Разделы 11 (Kokkuvõte) и 14 "
+        "(Lõpphinnang) — только Вы пишете, ИИ для них недоступен."
     )
 
 SEVERITY_OPTIONS = ["info", "nonconf_minor", "nonconf_major", "hazard"]
@@ -108,12 +148,20 @@ if llm_on:
                 "Для остальных — Sonnet 4.6 раскроет тезисы в один параграф."
             ),
         ):
-            with st.spinner("Claude составляет черновик…"):
+            with st.status(
+                "Claude (Sonnet 4.6) составляет эстонский черновик…",
+                expanded=True,
+            ) as status:
+                st.write(f"Раздел: **{SECTION_LABELS.get(scratch_section, scratch_section)}**")
+                st.write(f"Длина тезисов: {len(scratch_bullets)} символов")
                 try:
                     draft = draft_narrative(scratch_section, scratch_bullets)
                     st.session_state[DRAFT_RESULT_KEY] = (scratch_section, draft)
+                    _clear_error()
+                    status.update(label="Готово ✅", state="complete", expanded=False)
                 except Exception as e:
-                    st.error(f"ИИ-ошибка: {e}")
+                    _record_error("Не удалось получить черновик", e)
+                    status.update(label="Ошибка ❌", state="error", expanded=True)
             st.rerun()
 
 # Show draft result with accept/reject
@@ -318,12 +366,23 @@ for i, f in enumerate(audit.findings):
                         else "Раздел только для аудитора — polish отключён."
                     ),
                 ):
-                    with st.spinner("Polishing…"):
+                    with st.status(
+                        "Sonnet 4.6 правит грамматику…", expanded=True
+                    ) as status:
                         try:
-                            polished = polish_text(f.observation_raw, section_ref=f.section_ref)
+                            polished = polish_text(
+                                f.observation_raw, section_ref=f.section_ref
+                            )
                             st.session_state[_polish_key(i)] = polished
+                            _clear_error()
+                            status.update(
+                                label="Готово ✅", state="complete", expanded=False
+                            )
                         except Exception as e:
-                            st.error(f"ИИ-ошибка: {e}")
+                            _record_error(f"Polish (находка #{i + 1}) не удался", e)
+                            status.update(
+                                label="Ошибка ❌", state="error", expanded=True
+                            )
                     st.rerun()
 
             with ai_rank_col:
@@ -335,7 +394,9 @@ for i, f in enumerate(audit.findings):
                         "списка для текущего раздела."
                     ),
                 ):
-                    with st.spinner("Ranking…"):
+                    with st.status(
+                        "Haiku 4.5 ранжирует ссылки на закон…", expanded=True
+                    ) as status:
                         try:
                             ranked = rank_legal_refs(
                                 f.observation_raw,
@@ -343,8 +404,17 @@ for i, f in enumerate(audit.findings):
                                 section_ref=f.section_ref,
                             )
                             st.session_state[_rank_key(i)] = ranked
+                            _clear_error()
+                            status.update(
+                                label="Готово ✅", state="complete", expanded=False
+                            )
                         except Exception as e:
-                            st.error(f"ИИ-ошибка: {e}")
+                            _record_error(
+                                f"Подбор ссылок (находка #{i + 1}) не удался", e
+                            )
+                            status.update(
+                                label="Ошибка ❌", state="error", expanded=True
+                            )
                     st.rerun()
 
             # Polish result panel

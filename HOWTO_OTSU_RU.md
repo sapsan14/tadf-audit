@@ -23,7 +23,7 @@ uv sync
 
 ```bash
 cd ~/projects/tadf
-uv run streamlit run app/main.py
+uv run streamlit run app/TADF_Ehitus.py
 ```
 
 Откроется браузер. Если не открылся — зайдите вручную на <http://localhost:8501>.

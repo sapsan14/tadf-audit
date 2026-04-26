@@ -72,6 +72,15 @@ if not llm_on:
         "Подписи и разделы можно проставить вручную."
     )
 
+# Persistent error slot — same pattern as page 3
+PHOTO_ERROR_KEY = "_photo_ai_error"
+if PHOTO_ERROR_KEY in st.session_state:
+    with st.container(border=True):
+        st.error(f"🤖❌ Ошибка ИИ: {st.session_state[PHOTO_ERROR_KEY]}")
+        if st.button("Закрыть", key="close_photo_err"):
+            del st.session_state[PHOTO_ERROR_KEY]
+            st.rerun()
+
 cols = st.columns(3)
 for i, p in enumerate(audit.photos):
     with cols[i % 3]:
@@ -104,17 +113,25 @@ for i, p in enumerate(audit.photos):
                 ),
             )
             if ai_clicked and path.exists():
-                with st.spinner("ИИ смотрит фото…"):
+                with st.status(
+                    f"Haiku 4.5 смотрит фото #{i + 1}…", expanded=True
+                ) as status:
+                    st.write(f"Файл: {path.name}")
                     try:
                         result = caption_photo(path, auditor_note=new_caption)
+                        p.caption_auditor = result["caption"]
+                        p.section_ref = result["section_ref"]
+                        st.session_state.pop(PHOTO_ERROR_KEY, None)
+                        status.update(label="Готово ✅", state="complete", expanded=False)
+                        set_current(audit)
                     except Exception as e:
-                        st.error(f"ИИ-ошибка: {e}")
-                        result = None
-                if result:
-                    p.caption_auditor = result["caption"]
-                    p.section_ref = result["section_ref"]
-                    set_current(audit)
-                    st.rerun()
+                        st.session_state[PHOTO_ERROR_KEY] = (
+                            f"Подпись фото #{i + 1}: {type(e).__name__}: {e}"
+                        )
+                        # Keep status expanded on error so the user sees what failed
+                        status.update(label="Ошибка ❌", state="error", expanded=True)
+                # Always rerun so the persisted error (if any) renders at top
+                st.rerun()
         with del_col:
             if st.button("🗑️", key=f"delphoto_{i}"):
                 audit.photos.pop(i)

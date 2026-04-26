@@ -24,6 +24,7 @@ from typing import Any
 from anthropic import Anthropic
 
 from tadf.config import CACHE_DIR
+from tadf.llm.usage import record as _record_usage
 
 LLM_CACHE_DIR = CACHE_DIR / "llm"
 LLM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -129,6 +130,7 @@ def complete_text(
         messages=[{"role": "user", "content": user}],
     )
     text = next((b.text for b in resp.content if b.type == "text"), "").strip()
+    _record_usage(model, resp.usage)
     if cache:
         _cache_put(key, {"text": text, "model": model})
     return text
@@ -156,6 +158,7 @@ def complete_json(
         output_config={"format": {"type": "json_schema", "schema": schema}},
     )
     text = next((b.text for b in resp.content if b.type == "text"), "{}")
+    _record_usage(model, resp.usage)
     data = json.loads(text)
     if cache:
         _cache_put(key, {"data": data, "model": model})
@@ -203,6 +206,7 @@ def complete_with_image(
         ],
     )
     text = next((b.text for b in resp.content if b.type == "text"), "").strip()
+    _record_usage(model, resp.usage)
     if cache:
         _cache_put(key, {"text": text, "model": model})
     return text

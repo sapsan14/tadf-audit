@@ -3,8 +3,12 @@
 UI language: Russian (Fjodor's native language) with Estonian terms preserved
 for fields that appear in the report itself.
 
+The filename "TADF_Ehitus.py" is what Streamlit shows in the sidebar nav
+(underscores → spaces → "TADF Ehitus"). Don't rename without also updating
+README + Streamlit Cloud's "Main file path" setting.
+
 Run from project root:
-    uv run streamlit run app/main.py
+    uv run streamlit run app/TADF_Ehitus.py
 """
 
 from __future__ import annotations
@@ -23,6 +27,8 @@ import streamlit as st  # noqa: E402
 from tadf.config import ROOT  # noqa: E402
 from tadf.corpus.preload import preload_corpus, preload_demo  # noqa: E402
 from tadf.db.session import init_db  # noqa: E402
+from tadf.llm import is_available as _llm_available  # noqa: E402
+from tadf.llm.usage import summarise as _llm_summary  # noqa: E402
 
 st.set_page_config(
     page_title="TADF — Аудит",
@@ -96,3 +102,56 @@ if os.environ.get("STREAMLIT_SHARING_MODE") or "streamlit" in os.environ.get("HO
         "каждом перезапуске приложения. Для реальной работы используйте "
         "локальную установку (см. README) или подождите фазу 5 (Hetzner)."
     )
+
+
+# ---------------------------------------------------------------------------
+# Sidebar — Claude API usage tracker (visible on every page)
+# ---------------------------------------------------------------------------
+def _format_tokens(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.2f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
+
+
+with st.sidebar:
+    st.divider()
+    if _llm_available():
+        s = _llm_summary()
+        st.markdown("### 🤖 Расход Claude API")
+        if s.calls == 0:
+            st.caption("Пока ни одного вызова — расход $0.00")
+        else:
+            cost_eur = s.cost_usd * 0.92  # rough EUR/USD
+            st.metric(
+                label=f"≈ ${s.cost_usd:.4f}  /  €{cost_eur:.4f}",
+                value=f"{s.calls} вызов(ов)",
+            )
+            st.caption(
+                f"↑ {_format_tokens(s.input_tokens)} вход  ·  "
+                f"↓ {_format_tokens(s.output_tokens)} выход"
+            )
+            if s.cache_read_tokens or s.cache_write_tokens:
+                st.caption(
+                    f"кеш: чтение {_format_tokens(s.cache_read_tokens)}  ·  "
+                    f"запись {_format_tokens(s.cache_write_tokens)}"
+                )
+            with st.expander("По моделям"):
+                for model, m in s.by_model.items():
+                    st.write(
+                        f"**{model}**  ·  {int(m['calls'])} вызов(ов)  ·  "
+                        f"${m['cost']:.4f}"
+                    )
+                    st.caption(
+                        f"↑ {_format_tokens(int(m['input']))}  "
+                        f"↓ {_format_tokens(int(m['output']))}  "
+                        f"кеш ↑{_format_tokens(int(m['cache_read']))} "
+                        f"↓{_format_tokens(int(m['cache_write']))}"
+                    )
+        st.caption(
+            "Цены — оценочные, по публичному прайсу Anthropic (Sonnet $3/$15, "
+            "Haiku $1/$5 за 1M токенов; кеш-чтение ×0.1, кеш-запись ×1.25)."
+        )
+    else:
+        st.caption("🤖 ИИ-помощник выключен — нет ключа Anthropic API.")
