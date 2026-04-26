@@ -1,0 +1,430 @@
+name: Deploy (Hetzner)
+
+# Provisions / re-uses a Hetzner CAX11 (ARM, 2 vCPU, 4 GB RAM, ~€3.29/mo),
+# builds & pushes the Streamlit image to GHCR, updates Cloudflare DNS for
+# tadf-audit.h2oatlas.ee, and rolls out via SSH + bootstrap.sh.
+#
+# Required GitHub Actions secrets (Settings → Secrets and variables → Actions):
+#   HCLOUD_TOKEN              Hetzner Cloud API token (Read & Write)
+#   DEPLOY_SSH_PRIVATE_KEY    ed25519 private key (deploy user on the server)
+#   DEPLOY_SSH_PUBLIC_KEY     matching public key (cloud-init authorized_keys)
+#   CF_API_TOKEN              Cloudflare API token with Zone.DNS:Edit on h2oatlas.ee
+#   CF_ZONE_ID                Cloudflare Zone ID for h2oatlas.ee
+#   CADDY_ADMIN_EMAIL         email Let's Encrypt uses for cert notifications
+#   ANTHROPIC_API_KEY         already present
+#   AUTH_YAML                 full auth.yaml contents (passwords + cookie key)
+#
+# Optional: CF_PROXIED ("true"/"false", default "false") — DNS-only mode by
+# default so Caddy can do HTTP-01 directly. Flip to true once everything is
+# stable if you want CF's CDN/DDoS in front.
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: "Skip rebuilding the image (reuse latest on GHCR)"
+        type: boolean
+        default: false
+      recreate_server:
+        description: "Delete the existing server before provisioning"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "app/**"
+      - "src/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "ops/**"
+      - ".github/workflows/deploy-hetzner.yml"
+
+concurrency:
+  group: deploy-hetzner
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/tadf-audit
+  SERVER_NAME: tadf-prod
+  FIREWALL_NAME: tadf-fw
+  SSH_KEY_NAME: tadf-deploy
+  SERVER_IMAGE: ubuntu-24.04
+  SERVER_ARCH: arm
+  BUILD_PLATFORM: linux/arm64
+  MIN_RAM_GB: "4"
+  DOMAIN: tadf-audit.h2oatlas.ee
+  DOMAIN_NAME: tadf-audit  # the record name (subdomain) within h2oatlas.ee
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  preflight:
+    name: Preflight (verify secrets)
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Fail fast on missing secrets
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_PUBLIC_KEY: ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CADDY_ADMIN_EMAIL: ${{ secrets.CADDY_ADMIN_EMAIL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AUTH_YAML: ${{ secrets.AUTH_YAML }}
+        run: |
+          missing=()
+          for v in HCLOUD_TOKEN DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_PUBLIC_KEY \
+                   CF_API_TOKEN CF_ZONE_ID CADDY_ADMIN_EMAIL \
+                   ANTHROPIC_API_KEY AUTH_YAML; do
+            if [ -z "${!v:-}" ]; then missing+=("$v"); fi
+          done
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets present."
+      - id: tag
+        run: echo "tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build & push image
+    needs: preflight
+    if: ${{ !inputs.skip_build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.BUILD_PLATFORM }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}:latest
+            ${{ env.IMAGE_BASE }}:${{ needs.preflight.outputs.image_tag }}
+          cache-from: type=gha,scope=tadf-arm64
+          cache-to: type=gha,scope=tadf-arm64,mode=max
+
+  provision:
+    name: Provision Hetzner server
+    needs: [preflight, build]
+    if: ${{ always() && needs.preflight.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    outputs:
+      server_ip: ${{ steps.ensure.outputs.server_ip }}
+    env:
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install hcloud CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+            https://api.github.com/repos/hetznercloud/cli/releases/latest | jq -r .tag_name)
+          tmpdir=$(mktemp -d)
+          curl -fsSL "https://github.com/hetznercloud/cli/releases/download/${version}/hcloud-linux-amd64.tar.gz" \
+            -o "${tmpdir}/hcloud.tar.gz"
+          tar -xzf "${tmpdir}/hcloud.tar.gz" -C "${tmpdir}"
+          sudo install -m 0755 "${tmpdir}/hcloud" /usr/local/bin/hcloud
+
+      - name: Ensure SSH key in Hetzner project
+        env:
+          PUBKEY: ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}
+        run: |
+          set -euxo pipefail
+          if hcloud ssh-key describe "${SSH_KEY_NAME}" >/dev/null 2>&1; then
+            echo "SSH key already present"
+          else
+            hcloud ssh-key create --name "${SSH_KEY_NAME}" --public-key "${PUBKEY}"
+          fi
+
+      - name: Ensure firewall
+        run: |
+          set -euxo pipefail
+          if hcloud firewall describe "${FIREWALL_NAME}" >/dev/null 2>&1; then
+            echo "Firewall already present"
+          else
+            hcloud firewall create --name "${FIREWALL_NAME}"
+            for port in 22 80 443; do
+              hcloud firewall add-rule "${FIREWALL_NAME}" --direction in --protocol tcp \
+                --port "${port}" --source-ips 0.0.0.0/0 --source-ips ::/0
+            done
+            hcloud firewall add-rule "${FIREWALL_NAME}" --direction in --protocol udp \
+              --port 443 --source-ips 0.0.0.0/0 --source-ips ::/0
+          fi
+
+      - name: Render cloud-init with deploy public key
+        env:
+          PUBKEY: ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}
+        run: |
+          mkdir -p .ci
+          awk -v k="${PUBKEY}" '{gsub(/__DEPLOY_SSH_PUBLIC_KEY__/, k); print}' \
+            ops/hetzner/cloud-init.yaml > .ci/cloud-init.yaml
+
+      - name: Recreate server if requested or arch mismatch
+        run: |
+          set -euxo pipefail
+          delete=false
+          if [ "${{ inputs.recreate_server }}" = "true" ]; then
+            delete=true
+          elif hcloud server describe "${SERVER_NAME}" >/dev/null 2>&1; then
+            existing_arch=$(hcloud server describe -o json "${SERVER_NAME}" | jq -r '.server_type.architecture')
+            if [ "${existing_arch}" != "${SERVER_ARCH}" ]; then
+              echo "::warning::existing server is ${existing_arch}, build is ${SERVER_ARCH} — recreating"
+              delete=true
+            fi
+          fi
+          if ${delete}; then
+            hcloud server delete "${SERVER_NAME}" || true
+          fi
+
+      - name: Ensure server (cheapest available CAX11 / fallback)
+        id: ensure
+        run: |
+          set -euxo pipefail
+
+          if hcloud server describe "${SERVER_NAME}" >/dev/null 2>&1; then
+            echo "Server already exists — reusing"
+          else
+            hcloud server-type list -o json > /tmp/types.json
+            candidates=$(jq -r --arg arch "${SERVER_ARCH}" --argjson min "${MIN_RAM_GB}" '
+              [
+                .[] |
+                select(.architecture == $arch) |
+                select(.memory >= $min) |
+                select(.deprecation == null) |
+                {name, memory, cores, min_price: ([.prices[].price_monthly.net | tonumber] | min)}
+              ] | sort_by(.min_price) | .[].name
+            ' /tmp/types.json)
+
+            locations=(hel1 nbg1 fsn1)  # Helsinki first (closest to EE)
+            created=false
+            attempts=0
+            for t in ${candidates}; do
+              for l in "${locations[@]}"; do
+                attempts=$((attempts + 1))
+                if [ "${attempts}" -gt 8 ]; then break 2; fi
+                echo "=== attempt ${attempts}: ${t} in ${l} ==="
+                rc=0
+                hcloud server create \
+                    --name "${SERVER_NAME}" --type "${t}" --image "${SERVER_IMAGE}" \
+                    --location "${l}" --ssh-key "${SSH_KEY_NAME}" \
+                    --firewall "${FIREWALL_NAME}" \
+                    --user-data-from-file .ci/cloud-init.yaml \
+                    --label "managed-by=github-actions,server-type=${t},location=${l}" \
+                    >/tmp/server-create.log 2>&1 || rc=$?
+                if [ "${rc}" -eq 0 ]; then
+                  echo "### Created server" >> "$GITHUB_STEP_SUMMARY"
+                  echo "- type: \`${t}\`" >> "$GITHUB_STEP_SUMMARY"
+                  echo "- location: \`${l}\`" >> "$GITHUB_STEP_SUMMARY"
+                  created=true
+                  break 2
+                fi
+                echo "failed (rc=${rc}): $(tail -n 3 /tmp/server-create.log)"
+              done
+            done
+            if ! ${created}; then
+              echo "::error::all server-create attempts failed; see /tmp/server-create.log"
+              cat /tmp/server-create.log
+              exit 1
+            fi
+          fi
+          ip=$(hcloud server ip "${SERVER_NAME}")
+          echo "server_ip=${ip}" >> "$GITHUB_OUTPUT"
+          echo "Server IP: ${ip}"
+
+      - name: Wait for cloud-init to finish (SSH up + apt done)
+        env:
+          PRIVKEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ steps.ensure.outputs.server_ip }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${PRIVKEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 5 -t ed25519 "${SERVER_IP}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          for i in $(seq 1 60); do
+            out=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
+                      deploy@"${SERVER_IP}" "cloud-init status --wait" 2>/dev/null) || rc=$?
+            rc="${rc:-0}"
+            case "${out}" in
+              *"status: done"*|*"status: degraded done"*)
+                if [ "${rc}" -le 2 ]; then
+                  echo "cloud-init complete after ${i} attempts (status=${out})"
+                  exit 0
+                fi
+                ;;
+            esac
+            unset rc
+            sleep 10
+          done
+          echo "::error::cloud-init did not finish in 10 min"
+          exit 1
+
+  deploy:
+    name: Deploy application
+    needs: [preflight, provision]
+    runs-on: ubuntu-latest
+    env:
+      SERVER_IP: ${{ needs.provision.outputs.server_ip }}
+      IMAGE_TAG: ${{ needs.preflight.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Cloudflare DNS A record
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_PROXIED: ${{ vars.CF_PROXIED || 'false' }}
+        run: |
+          set -euo pipefail
+
+          api="https://api.cloudflare.com/client/v4"
+          hdr=(-H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json")
+
+          # Find existing record by exact name
+          existing=$(curl -fsS "${hdr[@]}" \
+            "${api}/zones/${CF_ZONE_ID}/dns_records?type=A&name=${DOMAIN}")
+          record_id=$(echo "${existing}" | jq -r '.result[0].id // empty')
+          payload=$(jq -nc --arg name "${DOMAIN_NAME}" --arg ip "${SERVER_IP}" \
+            --argjson proxied "${CF_PROXIED}" \
+            '{type:"A", name:$name, content:$ip, ttl:300, proxied:$proxied}')
+
+          if [ -n "${record_id}" ]; then
+            echo "Updating existing CF record ${record_id} → ${SERVER_IP}"
+            resp=$(curl -fsS -X PATCH "${hdr[@]}" \
+              "${api}/zones/${CF_ZONE_ID}/dns_records/${record_id}" \
+              --data "${payload}")
+          else
+            echo "Creating CF record ${DOMAIN} → ${SERVER_IP}"
+            resp=$(curl -fsS -X POST "${hdr[@]}" \
+              "${api}/zones/${CF_ZONE_ID}/dns_records" \
+              --data "${payload}")
+          fi
+          echo "${resp}" | jq -e '.success == true' >/dev/null
+
+      - name: Render .env (used by docker compose on the host)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CADDY_ADMIN_EMAIL: ${{ secrets.CADDY_ADMIN_EMAIL }}
+        run: |
+          mkdir -p .ci
+          cat > .ci/.env <<EOF
+          # Generated by .github/workflows/deploy-hetzner.yml
+          CADDY_DOMAIN=${DOMAIN}
+          CADDY_ADMIN_EMAIL=${CADDY_ADMIN_EMAIL}
+
+          TADF_IMAGE=${{ env.IMAGE_BASE }}:${{ env.IMAGE_TAG || 'latest' }}
+
+          ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+          EOF
+
+      - name: Render auth.yaml from secret
+        env:
+          AUTH_YAML: ${{ secrets.AUTH_YAML }}
+        run: |
+          mkdir -p .ci
+          printf '%s' "${AUTH_YAML}" > .ci/auth.yaml
+
+      - name: Prepare SSH
+        env:
+          PRIVKEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${PRIVKEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 5 -t ed25519 "${SERVER_IP}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Copy deploy artifacts to server
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new deploy@"${SERVER_IP}" "mkdir -p /opt/tadf"
+          scp -o StrictHostKeyChecking=accept-new \
+            ops/docker-compose.prod.yml \
+            deploy@"${SERVER_IP}":/opt/tadf/docker-compose.yml
+          scp -o StrictHostKeyChecking=accept-new \
+            ops/Caddyfile \
+            ops/hetzner/bootstrap.sh \
+            .ci/.env \
+            .ci/auth.yaml \
+            deploy@"${SERVER_IP}":/opt/tadf/
+
+      - name: Run bootstrap on server
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new deploy@"${SERVER_IP}" \
+            "GHCR_USERNAME='${GHCR_USERNAME}' GHCR_TOKEN='${GHCR_TOKEN}' bash /opt/tadf/bootstrap.sh"
+
+  smoke:
+    name: Smoke tests
+    needs: [provision, deploy]
+    runs-on: ubuntu-latest
+    env:
+      DOMAIN: tadf-audit.h2oatlas.ee
+      SERVER_IP: ${{ needs.provision.outputs.server_ip }}
+    steps:
+      - name: Wait for DNS to propagate
+        run: |
+          for i in $(seq 1 30); do
+            if getent hosts "${DOMAIN}" | head -1 | grep -q "${SERVER_IP}\|cloudflare\|cf-"; then
+              echo "DNS resolves"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::DNS did not propagate in 5 min, continuing anyway"
+
+      - name: Wait for HTTPS to answer (Caddy obtains cert on first hit)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 "https://${DOMAIN}/_stcore/health" >/dev/null 2>&1; then
+              echo "HTTPS ready after ${i} attempts"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::HTTPS never came up"
+          exit 1
+
+      - name: /_stcore/health returns ok
+        run: |
+          resp=$(curl -fsS "https://${DOMAIN}/_stcore/health")
+          echo "$resp"
+          [ "$resp" = "ok" ]
+
+      - name: Root page serves Streamlit
+        run: |
+          body=$(curl -fsSL "https://${DOMAIN}/")
+          echo "$body" | head -c 400
+          echo "$body" | grep -qi "streamlit\|tadf"
+
+      - name: Dump server logs on failure
+        if: failure()
+        env:
+          PRIVKEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${PRIVKEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 5 -t ed25519 "${SERVER_IP}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -o StrictHostKeyChecking=accept-new deploy@"${SERVER_IP}" \
+            "cd /opt/tadf && docker compose ps && docker compose logs --tail 200 tadf caddy || true"

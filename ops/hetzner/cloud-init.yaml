@@ -1,0 +1,88 @@
+#cloud-config
+# First-boot configuration for a TADF Аудит Hetzner host (Ubuntu 24.04).
+# Idempotent: cloud-init runs only on initial provisioning. To re-bootstrap,
+# delete the server in the workflow and let it recreate. Persistent state
+# lives in named Docker volumes — backup separately if needed.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - apt-listchanges
+  - jq
+  - git
+  - rsync
+
+users:
+  - name: deploy
+    groups: sudo, docker
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - __DEPLOY_SSH_PUBLIC_KEY__
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-tadf.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      ChallengeResponseAuthentication no
+      UsePAM yes
+      X11Forwarding no
+      MaxAuthTries 3
+      LoginGraceTime 20
+  - path: /etc/fail2ban/jail.d/sshd.local
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [sshd]
+      enabled = true
+      port    = ssh
+      filter  = sshd
+      logpath = /var/log/auth.log
+      maxretry = 4
+      bantime  = 1h
+  - path: /etc/apt/apt.conf.d/51unattended-upgrades-tadf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+
+runcmd:
+  # Docker Engine from upstream repo (Ubuntu 24.04 universe lags behind).
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update -y
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable --now docker
+  - usermod -aG docker deploy
+
+  # Firewall: only 22 / 80 / 443
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw allow 443/udp
+  - ufw --force enable
+
+  - systemctl enable --now fail2ban
+  - systemctl restart ssh
+
+  # App directory owned by deploy user.
+  - install -d -o deploy -g deploy -m 0755 /opt/tadf
+  - install -d -o deploy -g deploy -m 0700 /opt/tadf/secrets
+
+final_message: "TADF Аудит Hetzner host ready after $UPTIME seconds."

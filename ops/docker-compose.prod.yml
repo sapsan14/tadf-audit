@@ -1,0 +1,58 @@
+# Production stack on the Hetzner host.
+#
+# Two services:
+#   - tadf:  the Streamlit app (built by GitHub Actions, pushed to GHCR,
+#            pulled by `docker compose pull` in bootstrap.sh).
+#   - caddy: reverse proxy + auto-TLS via Let's Encrypt (HTTP-01).
+#
+# Persistent state lives in two named Docker volumes:
+#   - tadf-data:   /app/data inside the container — SQLite + photos + cache.
+#   - caddy-data + caddy-config: TLS certs + Caddy state.
+#
+# `auth.yaml` is bind-mounted from the host (/opt/tadf/auth.yaml), generated
+# from the AUTH_YAML GitHub secret by bootstrap.sh on first deploy.
+
+services:
+  tadf:
+    image: ${TADF_IMAGE:-ghcr.io/sapsan14/tadf-audit:latest}
+    container_name: tadf
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TADF_DB_URL=sqlite:////app/data/tadf.db
+    volumes:
+      - tadf-data:/app/data
+      - /opt/tadf/auth.yaml:/app/auth.yaml:ro
+    networks:
+      - web
+    expose:
+      - "8501"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - CADDY_DOMAIN=${CADDY_DOMAIN}
+      - CADDY_ADMIN_EMAIL=${CADDY_ADMIN_EMAIL}
+    volumes:
+      - /opt/tadf/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+    depends_on:
+      - tadf
+
+networks:
+  web:
+    driver: bridge
+
+volumes:
+  tadf-data:
+  caddy-data:
+  caddy-config:

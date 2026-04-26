@@ -1,0 +1,42 @@
+# Caddy reverse proxy for TADF Аудит on Hetzner.
+# Auto-TLS via Let's Encrypt (HTTP-01 challenge over port 80).
+# Domain + admin email injected from env: CADDY_DOMAIN, CADDY_ADMIN_EMAIL.
+#
+# Streamlit needs WebSocket pass-through for live updates — Caddy's
+# reverse_proxy handles that automatically (upgrades Connection header).
+#
+# Cloudflare DNS-only mode is assumed (no proxied traffic). If you flip
+# CF to proxied/orange-cloud later, swap to a TLS challenge that doesn't
+# require port 80 (DNS-01) and add `trusted_proxies` for CF IPs to keep
+# real-IP logs.
+
+{
+	email {$CADDY_ADMIN_EMAIL}
+	admin off
+}
+
+{$CADDY_DOMAIN} {
+	encode zstd gzip
+
+	# Bigger upload cap for photo batches (default is 32 MB).
+	request_body {
+		max_size 100MB
+	}
+
+	# WebSocket + main app
+	reverse_proxy tadf:8501 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		# Streamlit closes idle WS in ~30 s; bump our buffer so we don't
+		# hold up legit longer requests (LLM polish/draft can take 10–20 s).
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	# Lightweight liveness for the smoke test (Streamlit's own endpoint).
+	# Caddy proxies it transparently — no separate handler needed.
+}

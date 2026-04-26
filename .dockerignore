@@ -1,0 +1,40 @@
+# Keep Docker build context tight — only what the image actually needs.
+.git
+.github
+.venv
+.ruff_cache
+.pytest_cache
+.idea
+.vscode
+.claude
+
+# Tests + docs not needed at runtime
+tests
+docs
+
+# Local data (DB, photos, caches) — runtime, not build
+data
+*.db
+*.db-journal
+
+# Source corpus has client data — never bake into a public image
+audit
+
+# Auth secrets are mounted at runtime
+auth.yaml
+.streamlit/secrets.toml
+.env
+.env.local
+
+# Build artifacts
+__pycache__
+*.py[oc]
+build
+dist
+*.egg-info
+
+# Big binaries we don't need in image (bandwidth)
+*.docx
+!src/tadf/templates/ea_*.docx
+*.pdf
+*.asice
