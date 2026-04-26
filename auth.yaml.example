@@ -1,0 +1,27 @@
+# Template for auth.yaml — copy to auth.yaml (gitignored) and fill in.
+#
+# To generate a new password hash:
+#   uv run python -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt()).decode())"
+#
+# To generate a fresh cookie signing key:
+#   uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
+#
+# For Streamlit Cloud: paste the entire content of this file into the app's
+# Settings → Secrets as a single multiline value:
+#   auth_yaml = """<paste yaml here>"""
+
+credentials:
+  usernames:
+    yourusername:
+      email: you@example.com
+      first_name: Your
+      last_name: Name
+      logged_in: false
+      roles:
+        - admin
+      password: $2b$12$REPLACE_WITH_BCRYPT_HASH
+
+cookie:
+  name: tadf_auth
+  key: REPLACE_WITH_RANDOM_KEY
+  expiry_days: 30

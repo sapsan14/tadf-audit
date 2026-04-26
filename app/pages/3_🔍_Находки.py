@@ -7,6 +7,14 @@ _root = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_root))
 sys.path.insert(0, str(_root / "src"))
 
+from app._style import apply_consistent_layout  # noqa: E402
+
+apply_consistent_layout()
+
+from app._auth import require_login  # noqa: E402
+
+require_login()  # gate every page individually
+
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
@@ -139,15 +147,22 @@ if llm_on:
             height=100,
             key=f"scratch_bullets_{scope}",
         )
-        if st.button(
+        st.caption(
+            "💡 После ввода тезисов нажмите Tab или кликните вне поля — "
+            "Streamlit сохраняет значение по уходу с поля, потом жмите кнопку."
+        )
+        scratch_clicked = st.button(
             "✨ Расширить тезисы",
-            disabled=is_locked(scratch_section) or not scratch_bullets.strip(),
+            disabled=is_locked(scratch_section),
             key=f"scratch_run_{scope}",
             help=(
                 "Sections 11/14 заблокированы. "
                 "Для остальных — Sonnet 4.6 раскроет тезисы в один параграф."
             ),
-        ):
+        )
+        if scratch_clicked and not scratch_bullets.strip():
+            st.error("Введите тезисы перед запуском.")
+        elif scratch_clicked:
             with st.status(
                 "Claude (Sonnet 4.6) составляет эстонский черновик…",
                 expanded=True,

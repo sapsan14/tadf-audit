@@ -17,6 +17,7 @@ dependencies = [
   "exifread>=3.0",
   "anthropic>=0.40",
   "pdfplumber>=0.11",
+  "streamlit-authenticator>=0.4",
 ]
 
 [dependency-groups]

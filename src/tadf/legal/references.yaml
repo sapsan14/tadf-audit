@@ -1,72 +1,183 @@
 # Canonical legal references used in TADF audit reports.
-# Seeded from the historical corpus + the nine riigiteataja acts.
-# LLM (Phase 2) ranks from this list — never invents new entries.
+# Seeded from the 9 acts originally cited in the project plan + the laws and
+# EVS standards Fjodor's existing reports cite + the EVS-EN eurocode set.
+#
+# The Phase 2 LLM ranker (`tadf.llm.ranker.rank_legal_refs`) picks ONLY from
+# this list — never invents new entries. Section_keys are intentionally
+# generous (most acts apply to several sections); the ranker re-narrows by
+# semantic match. An empty section_keys list means "applicable everywhere".
+#
+# When a new law is mentioned in a real audit, ADD it here and re-deploy —
+# don't paste it directly into a finding.
 
+# ---------------------------------------------------------------------------
+# Ehitusseadustik (EhS) — Construction Code 2015
+# ---------------------------------------------------------------------------
 - code: "EhS § 11"
   title_et: "Ehitusseadustik § 11 — Ehitisele ja ehitamisele esitatavad nõuded"
   url: "https://www.riigiteataja.ee/akt/105032015001"
-  section_keys: ["1", "2", "11"]
+  section_keys: ["1", "2", "5", "6", "7", "8", "10", "11", "12", "14"]
 
 - code: "EhS § 12"
   title_et: "Ehitusseadustik § 12 — Ehitise kasutamine"
   url: "https://www.riigiteataja.ee/akt/105032015001"
-  section_keys: ["1", "11"]
+  section_keys: ["1", "2", "11", "12", "14"]
 
 - code: "EhS § 18"
   title_et: "Ehitusseadustik § 18 — Ehitise audit"
   url: "https://www.riigiteataja.ee/akt/105032015001"
+  section_keys: ["1", "2", "11", "12", "13", "14"]
+
+- code: "EhS § 24"
+  title_et: "Ehitusseadustik § 24 — Ehitise dokumendid"
+  url: "https://www.riigiteataja.ee/akt/105032015001"
   section_keys: ["1", "12"]
-  audit_types: ["EA", "EP"]
 
-- code: "Ehitise auditi tegemise kord"
-  title_et: "MKM määrus 'Ehitise auditi tegemise kord'"
+- code: "EhS § 26"
+  title_et: "Ehitusseadustik § 26 — Ehitise korrashoid"
+  url: "https://www.riigiteataja.ee/akt/105032015001"
+  section_keys: ["1", "11", "14"]
+
+- code: "EhS § 50"
+  title_et: "Ehitusseadustik § 50 — Kasutusluba"
+  url: "https://www.riigiteataja.ee/akt/105032015001"
+  section_keys: ["1", "11", "14"]
+
+# ---------------------------------------------------------------------------
+# EhSRS — Ehitusseadustiku rakendamise seadus
+# ---------------------------------------------------------------------------
+- code: "EhSRS § 28"
+  title_et: "EhSRS § 28 — Pre-2003 ehitiste dokumenteerimine, audit asendab dokumentatsiooni"
+  url: "https://www.riigiteataja.ee/akt/EhSRS"
+  section_keys: ["1", "2", "12"]
+
+- code: "EhSRS § 29"
+  title_et: "EhSRS § 29 — Post-2003 ehitiste audit ja Ehitisregistri kanne"
+  url: "https://www.riigiteataja.ee/akt/EhSRS"
+  section_keys: ["1", "2", "12"]
+
+# ---------------------------------------------------------------------------
+# Majandus- ja taristuministri määrused (MTR)
+# ---------------------------------------------------------------------------
+- code: "MTR määrus nr 116"
+  title_et: "MTR määrus nr 116 (24.09.2015) „Ehitise auditi tegemise kord“"
   url: "https://www.riigiteataja.ee/akt/120102020004"
-  section_keys: ["12", "13"]
+  section_keys: ["1", "11", "12", "13", "14"]
 
-- code: "Ehitise auditi tegemise kord § 5"
-  title_et: "Auditi aruande sisu nõuded"
+- code: "MTR määrus nr 116 § 5"
+  title_et: "MTR määrus nr 116 § 5 — Auditi aruande sisu nõuded"
   url: "https://www.riigiteataja.ee/akt/120102020004"
-  section_keys: ["12"]
+  section_keys: ["1", "11", "12", "13", "14"]
 
-- code: "Ehitise dokumendid ja juhendid"
-  title_et: "MKM määrus 'Nõuded ehitusprojekti, ehitise dokumentidele ja juhenditele'"
+- code: "MTR määrus nr 17"
+  title_et: "MTR määrus nr 17 (07.04.2017) „Ehitisele esitatavad tuleohutusnõuded ja nõuded tuletõrje veevarustusele“"
   url: "https://www.riigiteataja.ee/akt/118022020009"
-  section_keys: ["12"]
+  section_keys: ["8", "12"]
 
-- code: "Nõuded ehitusprojektile"
-  title_et: "MKM määrus 'Nõuded ehitusprojektile'"
+- code: "MTR määrus nr 85"
+  title_et: "MTR määrus nr 85 (02.07.2015) „Eluruumidele esitatavad nõuded“"
   url: "https://www.riigiteataja.ee/akt/118072015007"
-  section_keys: ["7", "12"]
+  section_keys: ["2", "5", "6", "7", "10", "12"]
 
-- code: "Ehitise tehniliste andmete loetelu"
-  title_et: "MKM määrus 'Ehitise tehniliste andmete loetelu ja arvestamise alused'"
+- code: "MTR määrus nr 57"
+  title_et: "MTR määrus nr 57 (05.06.2015) „Ehitise tehniliste andmete loetelu ja arvestamise alused“"
   url: "https://www.riigiteataja.ee/akt/110062015008"
   section_keys: ["10", "12"]
 
-- code: "EhSRS § 28"
-  title_et: "Ehitusseadustiku rakendamise seadus § 28 — pre-2003 ehitiste dokumenteerimine"
-  url: "https://www.riigiteataja.ee/akt/EhSRS"
-  section_keys: ["12"]
+- code: "Ehitise dokumendid ja juhendid"
+  title_et: "MTR määrus „Nõuded ehitise dokumentidele ja juhenditele“"
+  url: "https://www.riigiteataja.ee/akt/118022020009"
+  section_keys: ["1", "12"]
 
-- code: "EhSRS § 29"
-  title_et: "Ehitusseadustiku rakendamise seadus § 29 — post-2003 ehitiste audit"
-  url: "https://www.riigiteataja.ee/akt/EhSRS"
-  section_keys: ["12"]
-
-- code: "Tuleohutuse seadus"
-  title_et: "Tuleohutuse seadus"
-  url: "https://www.riigiteataja.ee/akt/13314859"
-  section_keys: ["8", "9"]
+- code: "Nõuded ehitusprojektile"
+  title_et: "MTR määrus „Nõuded ehitusprojektile“"
+  url: "https://www.riigiteataja.ee/akt/118072015007"
+  section_keys: ["5", "6", "7", "12"]
 
 - code: "Ehitisregistrile esitamise kord"
-  title_et: "MKM määrus 'Ehitisregistrile andmete esitamise kord'"
+  title_et: "MTR määrus „Ehitisregistrile andmete esitamise kord“"
   url: "https://www.riigiteataja.ee/akt/12939670"
   section_keys: ["12"]
 
+# ---------------------------------------------------------------------------
+# Tuleohutuse seadus + EVS 812 fire safety series
+# ---------------------------------------------------------------------------
+- code: "Tuleohutuse seadus"
+  title_et: "Tuleohutuse seadus"
+  url: "https://www.riigiteataja.ee/akt/13314859"
+  section_keys: ["8", "12"]
+
+- code: "EVS 812-1"
+  title_et: "EVS 812-1 — Ehitiste tuleohutus, osa 1: Sõnastik"
+  section_keys: ["8", "12"]
+
+- code: "EVS 812-2"
+  title_et: "EVS 812-2 — Ehitiste tuleohutus, osa 2: Ventilatsioonisüsteemid"
+  section_keys: ["7", "8", "12"]
+
+- code: "EVS 812-3"
+  title_et: "EVS 812-3 — Ehitiste tuleohutus, osa 3: Küttesüsteemid"
+  section_keys: ["7", "8", "12"]
+
+- code: "EVS 812-6"
+  title_et: "EVS 812-6 — Ehitiste tuleohutus, osa 6: Tuletõrje veevarustus"
+  section_keys: ["8", "12"]
+
 - code: "EVS 812-7"
-  title_et: "Eesti standard EVS 812-7 — Ehitiste tuleohutus, osa 7"
-  section_keys: ["8", "9"]
+  title_et: "EVS 812-7 — Ehitiste tuleohutus, osa 7: Ehitistele esitatavad nõuded"
+  section_keys: ["8", "12"]
+
+# ---------------------------------------------------------------------------
+# EVS-EN — Eurocodes (load-bearing structures)
+# ---------------------------------------------------------------------------
+- code: "EVS-EN 1990"
+  title_et: "EVS-EN 1990 — Ehituskonstruktsioonide projekteerimise alused"
+  section_keys: ["5", "6", "12"]
+
+- code: "EVS-EN 1991-1-1"
+  title_et: "EVS-EN 1991-1-1 — Koormused, osa 1-1: Üldkoormused, mahukaalud, omakaalud, kasuskoormused"
+  section_keys: ["5", "6", "12"]
+
+- code: "EVS-EN 1991-1-3"
+  title_et: "EVS-EN 1991-1-3 — Koormused, osa 1-3: Lumekoormus"
+  section_keys: ["5", "6", "12"]
+
+- code: "EVS-EN 1991-1-4"
+  title_et: "EVS-EN 1991-1-4 — Koormused, osa 1-4: Tuulekoormus"
+  section_keys: ["5", "6", "12"]
+
+- code: "EVS-EN 1992"
+  title_et: "EVS-EN 1992 — Betoonkonstruktsioonide projekteerimine"
+  section_keys: ["6", "12"]
+
+- code: "EVS-EN 1993"
+  title_et: "EVS-EN 1993 — Teraskonstruktsioonide projekteerimine"
+  section_keys: ["6", "12"]
+
+- code: "EVS-EN 1995"
+  title_et: "EVS-EN 1995 — Puidust konstruktsioonide projekteerimine"
+  section_keys: ["6", "12"]
+
+- code: "EVS-EN 1996"
+  title_et: "EVS-EN 1996 — Müürkonstruktsioonide projekteerimine"
+  section_keys: ["6", "12"]
+
+- code: "EVS-EN 60364"
+  title_et: "EVS-HD 60364 — Madalpinge elektripaigaldised"
+  section_keys: ["7", "12"]
 
 - code: "EVS 932"
-  title_et: "Eesti standard EVS 932 — Ehitusprojekt"
-  section_keys: ["7"]
+  title_et: "EVS 932 — Ehitusprojekt"
+  section_keys: ["5", "6", "7", "12"]
+
+- code: "ET-2 0102-0329"
+  title_et: "ET-2 0102-0329 — Eesti kliima teatmik ehitajatele"
+  section_keys: ["5", "6", "12"]
+
+# ---------------------------------------------------------------------------
+# Korteriomandiseadus (apartment ownership) — relevant for multi-apartment audits
+# ---------------------------------------------------------------------------
+- code: "Korteriomandiseadus"
+  title_et: "Korteriomandiseadus (KrtS) — Korterelamute energia ja ühisomandi nõuded"
+  url: "https://www.riigiteataja.ee/akt/12742145"
+  section_keys: ["1", "11", "12"]

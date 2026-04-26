@@ -9,6 +9,10 @@ wheels/
 .env
 .env.local
 
+# Auth — bcrypt-hashed passwords + cookie signing key
+auth.yaml
+.streamlit/secrets.toml
+
 # SENSITIVE — real client audit reports, never commit
 /audit/
 

@@ -14,10 +14,14 @@ from tadf.llm.client import MODEL_RANKER, complete_json
 def rank_legal_refs(observation: str, *, audit_type: str, section_ref: str) -> list[str]:
     """Return up to 3 legal-ref codes ranked by relevance.
 
-    Candidate set is `for_section(section_ref, audit_type)` — model picks from
-    those codes only.
+    Candidate set comes from `for_section(section_ref)` — the audit_type
+    filter is intentionally NOT passed in; section-keys filtering is enough,
+    and the model is better at deciding type-relevance than our coarse table.
+
+    The model picks from this candidate set only — `enum` JSON-schema
+    constraint guarantees no hallucination.
     """
-    candidates = for_section(section_ref.split(".", 1)[0], audit_type)
+    candidates = for_section(section_ref.split(".", 1)[0])
     if not candidates:
         return []
     candidate_codes = [r.code for r in candidates]

@@ -22,6 +22,14 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT / "src"))
 
+from app._style import apply_consistent_layout  # noqa: E402
+
+apply_consistent_layout("TADF Ehitus")
+
+from app._auth import logout_button, require_login  # noqa: E402
+
+_auth = require_login()  # blocks rendering until the user is authenticated
+
 import streamlit as st  # noqa: E402
 
 from tadf.config import ROOT  # noqa: E402
@@ -29,13 +37,6 @@ from tadf.corpus.preload import preload_corpus, preload_demo  # noqa: E402
 from tadf.db.session import init_db  # noqa: E402
 from tadf.llm import is_available as _llm_available  # noqa: E402
 from tadf.llm.usage import summarise as _llm_summary  # noqa: E402
-
-st.set_page_config(
-    page_title="TADF — Аудит",
-    page_icon="🏗️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 init_db()
 
@@ -116,6 +117,12 @@ def _format_tokens(n: int) -> str:
 
 
 with st.sidebar:
+    user_display = st.session_state.get("name", "")
+    if user_display:
+        st.markdown(f"👤 **{user_display}**")
+    logout_button(_auth, location="sidebar")
+    st.markdown("---")
+
     if _llm_available():
         s = _llm_summary()
         st.markdown("**🤖 Расход Claude API**")
