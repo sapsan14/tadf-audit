@@ -23,7 +23,7 @@ from tadf.llm import (  # noqa: E402
 from tadf.models import Finding  # noqa: E402
 from tadf.sections import SECTION_KEYS, SECTION_LABELS  # noqa: E402
 
-st.title("Находки и наблюдения")
+st.title("Наблюдения")
 st.caption(
     "Выбор раздела опирается на структуру 14-секционного отчёта (Tiitelleht → "
     "Allkirjad). Подразделы (6.1–6.15, 7.1–7.10, 8.1–8.13 и т.д.) добавлены "
@@ -73,8 +73,8 @@ else:
     st.info(
         "🤖 **Где находится ИИ-помощник:**\n"
         "- ✨ **Черновик из тезисов** — в раскрывающемся блоке ниже\n"
-        "- ✏️ **Polish текста** — внутри каждой существующей находки (раскройте её)\n"
-        "- 💡 **Подобрать ссылки на закон** — там же, внутри находки\n"
+        "- ✏️ **Polish текста** — внутри каждого существующего наблюдения (раскройте её)\n"
+        "- 💡 **Подобрать ссылки на закон** — там же, внутри наблюдения\n"
         "- 🤖 **Подпись к фото** — на странице «Фото»\n\n"
         "Все ответы ИИ показываются с кнопками «Принять / Отклонить» — без вашего "
         "согласия ничего в отчёт не попадает. Разделы 11 (Kokkuvõte) и 14 "
@@ -177,7 +177,7 @@ if DRAFT_RESULT_KEY in st.session_state:
     st.success(f"Черновик от ИИ для раздела «{SECTION_LABELS.get(sec, sec)}»:")
     st.markdown(f"> {draft}")
     a, b = st.columns(2)
-    if a.button("✅ Использовать в новой находке", type="primary", key=f"draft_accept_{scope}"):
+    if a.button("✅ Использовать в новом наблюдении", type="primary", key=f"draft_accept_{scope}"):
         st.session_state[NEW_SECTION_KEY] = sec
         st.session_state[NEW_OBS_KEY] = draft
         del st.session_state[DRAFT_RESULT_KEY]
@@ -190,7 +190,7 @@ if DRAFT_RESULT_KEY in st.session_state:
 # ---------------------------------------------------------------------------
 # Add new finding (plain widgets, not a form — so AI buttons can sit inline)
 # ---------------------------------------------------------------------------
-st.subheader("Добавить находку")
+st.subheader("Добавить наблюдение")
 
 c1, c2 = st.columns([1, 3])
 with c1:
@@ -235,14 +235,14 @@ if suggestions:
         format_func=lambda c: f"{c} — {next(r.title_et for r in suggestions if r.code == c)[:60]}",
         key=f"new_finding_refs_{scope}",
         help=(
-            "Какие нормы нарушены или подтверждены этой находкой. "
+            "Какие нормы нарушены или подтверждены этим наблюдением. "
             "Список — из курируемой таблицы legal/references.yaml. "
             "ИИ может ранжировать варианты, но никогда не придумывает новые."
         ),
     )
 
 add_col, _ = st.columns([1, 4])
-if add_col.button("➕ Добавить находку", type="primary", key=f"add_finding_{scope}"):
+if add_col.button("➕ Добавить наблюдение", type="primary", key=f"add_finding_{scope}"):
     if not new_observation.strip():
         st.error("Наблюдение не может быть пустым.")
     else:
@@ -259,17 +259,17 @@ if add_col.button("➕ Добавить находку", type="primary", key=f"a
         st.session_state[NEW_OBS_KEY] = ""
         st.session_state[f"new_finding_rec_{scope}"] = ""
         set_current(audit)
-        st.success("Находка добавлена")
+        st.success("Наблюдение добавлено")
         st.rerun()
 
 
 # ---------------------------------------------------------------------------
 # Edit / delete existing findings, with per-finding AI helpers
 # ---------------------------------------------------------------------------
-st.subheader(f"Все находки ({len(audit.findings)})")
+st.subheader(f"Все наблюдения ({len(audit.findings)})")
 if not audit.findings:
     st.caption(
-        "Пока нет находок. Добавьте хотя бы одну в каждый из обязательных "
+        "Пока нет наблюдений. Добавьте хотя бы одну в каждый из обязательных "
         "разделов: 11 (Kokkuvõte) и 14 (Lõpphinnang)."
     )
 
@@ -414,7 +414,7 @@ for i, f in enumerate(audit.findings):
                         _clear_error()
                         status.update(label="Готово ✅", state="complete", expanded=False)
                     except Exception as e:
-                        _record_error(f"Polish (находка #{i + 1}) не удался", e)
+                        _record_error(f"Polish (наблюдение #{i + 1}) не удался", e)
                         status.update(label="Ошибка ❌", state="error", expanded=True)
                 st.rerun()
 
@@ -433,7 +433,7 @@ for i, f in enumerate(audit.findings):
                         status.update(label="Готово ✅", state="complete", expanded=False)
                     except Exception as e:
                         _record_error(
-                            f"Подбор ссылок (находка #{i + 1}) не удался", e
+                            f"Подбор ссылок (наблюдение #{i + 1}) не удался", e
                         )
                         status.update(label="Ошибка ❌", state="error", expanded=True)
                 st.rerun()
@@ -480,7 +480,7 @@ for i, f in enumerate(audit.findings):
                     st.write(f"• `{code}`")
                 ra, rb = st.columns(2)
                 if ra.button(
-                    "✅ Добавить к находке",
+                    "✅ Добавить к наблюдению",
                     key=f"rank_accept_{scope}_{i}",
                     type="primary",
                 ):

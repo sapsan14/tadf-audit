@@ -69,18 +69,7 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
     padding-top: 1rem;
 }}
 
-/* Logo lives at the very top of the sidebar. */
-.tadf-sidebar-logo {{
-    text-align: center;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-}}
-.tadf-sidebar-logo svg {{
-    width: 70%;
-    max-width: 180px;
-    height: auto;
-}}
+/* st.logo() handles its own placement at the top of the sidebar. */
 
 /* Version footer pinned to the bottom of the sidebar by margin-top: auto. */
 .tadf-sidebar-footer {{
@@ -104,18 +93,22 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
 
 
 def render_sidebar_logo() -> None:
-    """Logo at the top of the sidebar. Inlined as SVG so it inherits
-    currentColor (works in light + dark theme without extra files)."""
+    """Logo at the very top of the sidebar — *above* st.navigation.
+
+    Uses st.logo() (Streamlit ≥ 1.34), which has a privileged slot at the
+    top of the sidebar that custom widgets can't reach. The icon_image is
+    used when the sidebar is collapsed.
+    """
     if not LOGO_PATH.exists():
         return
-    svg = LOGO_PATH.read_text(encoding="utf-8")
-    # Strip the XML prolog so the SVG can be inlined inside HTML
-    if svg.startswith("<?xml"):
-        svg = svg.split("?>", 1)[1].lstrip()
-    st.sidebar.markdown(
-        f'<div class="tadf-sidebar-logo">{svg}</div>',
-        unsafe_allow_html=True,
-    )
+    kwargs: dict = {"size": "large"}
+    if FAVICON_PATH.exists():
+        kwargs["icon_image"] = str(FAVICON_PATH)
+    try:
+        st.logo(str(LOGO_PATH), **kwargs)
+    except Exception:
+        # Older Streamlit without st.logo() — fall back to st.image.
+        st.sidebar.image(str(LOGO_PATH), width="stretch")
 
 
 def render_sidebar_footer() -> None:

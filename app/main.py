@@ -53,7 +53,7 @@ pages = [
     st.Page("TADF_Ehitus.py", title="TADF Ehitus", icon="🏗️", default=True),
     st.Page("pages/1_📝_Новый_аудит.py", title="Новый аудит", icon="📝"),
     st.Page("pages/2_🏠_Здание.py", title="Здание", icon="🏠"),
-    st.Page("pages/3_🔍_Находки.py", title="Находки", icon="🔍"),
+    st.Page("pages/3_🔍_Наблюдения.py", title="Наблюдения", icon="🔍"),
     st.Page("pages/4_📸_Фото.py", title="Фото", icon="📸"),
     st.Page("pages/5_📄_Готовый_отчёт.py", title="Готовый отчёт", icon="📄"),
     st.Page("pages/6_📚_Правовая_база.py", title="Правовая база", icon="📚"),

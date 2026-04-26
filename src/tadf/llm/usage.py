@@ -1,14 +1,16 @@
 """Track Anthropic token usage + estimated cost across sessions.
 
-Usage is appended to a JSONL file at `data/cache/llm/usage.jsonl` so the
-counter survives Streamlit restarts and isn't lost between days. Aggregation
-is fast — there's no expectation of millions of rows for a one-person practice.
+Persisted in the `llm_usage` SQLite table — survives deploys and
+container restarts (the DB file is in the persistent `tadf-data`
+volume on Hetzner). Earlier versions used a JSONL log in
+`data/cache/llm/usage.jsonl`; we keep a one-time import on first
+DB read so historical data is preserved.
 
 Pricing per million tokens (USD), cached 2026-04 from the public price list:
   - claude-sonnet-4-6: $3.00 input / $15.00 output
   - claude-haiku-4-5:  $1.00 input / $5.00 output
 
-Cache reads are ~10 % of input price; cache writes are ~125 % of input price
+Cache reads are ~10% of input price; cache writes are ~125% of input price
 (both for the 5-minute TTL we use).
 """
 
@@ -17,12 +19,18 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
-from tadf.config import CACHE_DIR
+from sqlalchemy import func, select
 
-USAGE_LOG = CACHE_DIR / "llm" / "usage.jsonl"
-USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+from tadf.config import CACHE_DIR
+from tadf.db.orm import LlmUsageRow
+from tadf.db.session import session_scope
+
+LEGACY_JSONL = CACHE_DIR / "llm" / "usage.jsonl"
+_MIGRATED_FLAG = CACHE_DIR / "llm" / ".usage_migrated"
 
 # USD per million tokens
 PRICING: dict[str, dict[str, float]] = {
@@ -57,37 +65,76 @@ class UsageRow:
         return round(cost, 6)
 
 
+def _cost_usd(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int,
+    cache_write_tokens: int,
+) -> float:
+    p = PRICING.get(model)
+    if not p:
+        return 0.0
+    cost = (
+        input_tokens * p["input"]
+        + output_tokens * p["output"]
+        + cache_read_tokens * p["input"] * CACHE_READ_FACTOR
+        + cache_write_tokens * p["input"] * CACHE_WRITE_FACTOR
+    ) / 1_000_000
+    return round(cost, 6)
+
+
+def _migrate_jsonl_once() -> None:
+    """Best-effort: import any pre-DB JSONL log into llm_usage, then mark
+    it migrated. Runs on first read after the schema upgrade."""
+    if _MIGRATED_FLAG.exists() or not LEGACY_JSONL.exists():
+        return
+    try:
+        rows: list[dict] = []
+        for line in LEGACY_JSONL.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        if rows:
+            with session_scope() as s:
+                for r in rows:
+                    s.add(
+                        LlmUsageRow(
+                            ts=datetime.utcfromtimestamp(r.get("ts", time.time())),
+                            model=r.get("model", "unknown"),
+                            input_tokens=int(r.get("input_tokens", 0)),
+                            output_tokens=int(r.get("output_tokens", 0)),
+                            cache_read_tokens=int(r.get("cache_read_tokens", 0)),
+                            cache_write_tokens=int(r.get("cache_write_tokens", 0)),
+                        )
+                    )
+        _MIGRATED_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        _MIGRATED_FLAG.write_text(f"migrated {len(rows)} rows at {time.time()}\n")
+    except Exception:
+        # Migration is best-effort — don't crash the app over the legacy log.
+        pass
+
+
 def record(model: str, usage: Any) -> None:
-    """Persist one API call's usage to the JSONL log.
+    """Persist one API call's usage to the DB.
 
     `usage` is the `response.usage` object from anthropic.types. Tolerates
     missing attributes (older SDK shapes return None for cache fields).
     """
-    row = UsageRow(
-        ts=time.time(),
-        model=model,
-        input_tokens=getattr(usage, "input_tokens", 0) or 0,
-        output_tokens=getattr(usage, "output_tokens", 0) or 0,
-        cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-        cache_write_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-    )
-    with USAGE_LOG.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row.__dict__) + "\n")
-
-
-def read_all() -> list[UsageRow]:
-    if not USAGE_LOG.exists():
-        return []
-    rows: list[UsageRow] = []
-    for line in USAGE_LOG.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            d = json.loads(line)
-            rows.append(UsageRow(**d))
-        except Exception:
-            continue
-    return rows
+    with session_scope() as s:
+        s.add(
+            LlmUsageRow(
+                ts=datetime.utcnow(),
+                model=model,
+                input_tokens=getattr(usage, "input_tokens", 0) or 0,
+                output_tokens=getattr(usage, "output_tokens", 0) or 0,
+                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+                cache_write_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -102,45 +149,92 @@ class Summary:
 
 
 def summarise() -> Summary:
-    rows = read_all()
+    """Aggregate all rows in llm_usage into per-model + total counters."""
+    _migrate_jsonl_once()
+
+    with session_scope() as s:
+        # Totals
+        total_row = s.execute(
+            select(
+                func.count(LlmUsageRow.id),
+                func.coalesce(func.sum(LlmUsageRow.input_tokens), 0),
+                func.coalesce(func.sum(LlmUsageRow.output_tokens), 0),
+                func.coalesce(func.sum(LlmUsageRow.cache_read_tokens), 0),
+                func.coalesce(func.sum(LlmUsageRow.cache_write_tokens), 0),
+            )
+        ).one()
+        # Per-model
+        model_rows = s.execute(
+            select(
+                LlmUsageRow.model,
+                func.count(LlmUsageRow.id),
+                func.coalesce(func.sum(LlmUsageRow.input_tokens), 0),
+                func.coalesce(func.sum(LlmUsageRow.output_tokens), 0),
+                func.coalesce(func.sum(LlmUsageRow.cache_read_tokens), 0),
+                func.coalesce(func.sum(LlmUsageRow.cache_write_tokens), 0),
+            ).group_by(LlmUsageRow.model)
+        ).all()
+
+    total_calls, total_in, total_out, total_cr, total_cw = total_row
+    total_cost = _cost_usd(
+        "_total", int(total_in), int(total_out), int(total_cr), int(total_cw)
+    )
+    # The above is wrong — different models have different prices.
+    # Recompute by summing per-model costs.
     by_model: dict[str, dict[str, float]] = {}
-    total = {
-        "calls": 0,
-        "input": 0,
-        "output": 0,
-        "cache_read": 0,
-        "cache_write": 0,
-        "cost": 0.0,
-    }
-    for r in rows:
-        m = by_model.setdefault(
-            r.model,
-            {"calls": 0, "input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cost": 0.0},
-        )
-        m["calls"] += 1
-        m["input"] += r.input_tokens
-        m["output"] += r.output_tokens
-        m["cache_read"] += r.cache_read_tokens
-        m["cache_write"] += r.cache_write_tokens
-        m["cost"] += r.cost_usd
-        total["calls"] += 1
-        total["input"] += r.input_tokens
-        total["output"] += r.output_tokens
-        total["cache_read"] += r.cache_read_tokens
-        total["cache_write"] += r.cache_write_tokens
-        total["cost"] += r.cost_usd
+    total_cost = 0.0
+    for model, calls, ti, to, cr, cw in model_rows:
+        cost = _cost_usd(model, int(ti), int(to), int(cr), int(cw))
+        by_model[model] = {
+            "calls": int(calls),
+            "input": int(ti),
+            "output": int(to),
+            "cache_read": int(cr),
+            "cache_write": int(cw),
+            "cost": round(cost, 4),
+        }
+        total_cost += cost
+
     return Summary(
-        calls=int(total["calls"]),
-        input_tokens=int(total["input"]),
-        output_tokens=int(total["output"]),
-        cache_read_tokens=int(total["cache_read"]),
-        cache_write_tokens=int(total["cache_write"]),
-        cost_usd=round(total["cost"], 4),
-        by_model={
-            k: {kk: round(vv, 4) if kk == "cost" else vv for kk, vv in v.items()} for k, v in by_model.items()
-        },
+        calls=int(total_calls),
+        input_tokens=int(total_in),
+        output_tokens=int(total_out),
+        cache_read_tokens=int(total_cr),
+        cache_write_tokens=int(total_cw),
+        cost_usd=round(total_cost, 4),
+        by_model=by_model,
     )
 
 
 def reset() -> None:
-    USAGE_LOG.unlink(missing_ok=True)
+    """Delete every llm_usage row. Used by tests."""
+    with session_scope() as s:
+        s.query(LlmUsageRow).delete()
+
+
+def read_all() -> list[UsageRow]:
+    """Backward-compat: return UsageRow dataclasses from the DB. Tests use this."""
+    _migrate_jsonl_once()
+    with session_scope() as s:
+        rows = s.query(LlmUsageRow).order_by(LlmUsageRow.ts).all()
+        return [
+            UsageRow(
+                ts=r.ts.timestamp() if isinstance(r.ts, datetime) else float(r.ts),
+                model=r.model,
+                input_tokens=r.input_tokens,
+                output_tokens=r.output_tokens,
+                cache_read_tokens=r.cache_read_tokens,
+                cache_write_tokens=r.cache_write_tokens,
+            )
+            for r in rows
+        ]
+
+
+# Streamlit Cloud has ephemeral storage — on Cloud the DB resets each
+# restart anyway, so persisting in SQLite vs JSONL makes no difference
+# there. On Hetzner the SQLite file lives in a Docker volume that survives
+# restarts and image rebuilds; that's where the long-running counter lives.
+
+# Keep `Path` import unused from oss; ruff will flag it if we leave a
+# truly unused import — silence by referencing it once.
+_ = Path

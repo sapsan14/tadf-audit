@@ -130,3 +130,18 @@ class PhotoRow(Base):
     accepted: Mapped[bool] = mapped_column(default=True)
 
     audit: Mapped[AuditRow] = relationship(back_populates="photos")
+
+
+class LlmUsageRow(Base):
+    """One row per Claude API call. Persists across deploys (lives in the
+    SQLite file in tadf-data volume on Hetzner). Replaces the JSONL log
+    that lived only in the cache dir."""
+
+    __tablename__ = "llm_usage"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    model: Mapped[str] = mapped_column(String(64), index=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
