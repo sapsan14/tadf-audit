@@ -286,80 +286,74 @@ def _rank_key(i: int) -> str:
 
 
 for i, f in enumerate(audit.findings):
-    severity_icon = SEVERITY_LABELS[f.severity].split(" ", 1)[0]
-    preview = " ".join(f.observation_raw.split())[:80] or "(пусто)"
-    section_label = SECTION_LABELS.get(f.section_ref, f.section_ref).split(".", 1)[0]
-    title = f"{i + 1}. {severity_icon} [{section_label}] {preview}"
+    # Title: section ref + section name only — e.g. "7.1. Veevarustus".
+    title = SECTION_LABELS.get(f.section_ref, f.section_ref)
     expanded = st.session_state._pending_delete == i
+
+    # If a previous click on "Добавить к наблюдению" stashed merged refs,
+    # apply them BEFORE the multiselect renders in this run (Streamlit forbids
+    # writing the widget's session_state key after the widget exists). We pop
+    # the widget key too so it reseeds from default=f.legal_ref_codes.
+    _pending_refs_key = f"_pending_refs_{scope}_{i}"
+    if _pending_refs_key in st.session_state:
+        f.legal_ref_codes = st.session_state.pop(_pending_refs_key)
+        st.session_state.pop(f"refs_{scope}_{i}", None)
+        set_current(audit)
+
     with st.expander(title, expanded=expanded):
-        # ---- Inline edit form ----
-        with st.form(f"edit_finding_{scope}_{i}"):
-            ec1, ec2 = st.columns([1, 3])
-            with ec1:
-                edited_section = st.selectbox(
-                    "Раздел",
-                    options=SECTION_KEYS,
-                    index=SECTION_KEYS.index(f.section_ref) if f.section_ref in SECTION_KEYS else 0,
-                    format_func=lambda x: SECTION_LABELS[x],
-                    key=f"sec_{scope}_{i}",
-                )
-                edited_severity = st.selectbox(
-                    "Серьёзность",
-                    options=SEVERITY_OPTIONS,
-                    index=SEVERITY_OPTIONS.index(f.severity),
-                    format_func=lambda s: SEVERITY_LABELS[s],
-                    key=f"sev_{scope}_{i}",
-                )
-            with ec2:
-                edited_observation = st.text_area(
-                    "Наблюдение",
-                    value=f.observation_raw,
-                    height=100,
-                    key=f"obs_{scope}_{i}",
-                )
-                edited_recommendation = st.text_area(
-                    "Рекомендация",
-                    value=f.recommendation or "",
-                    height=60,
-                    key=f"rec_{scope}_{i}",
-                )
-
-            section_for_refs = edited_section if edited_section else f.section_ref
-            sugs = _legal_refs_for(section_for_refs)
-            available_codes = sorted({r.code for r in sugs} | set(f.legal_ref_codes))
-
-            def _ref_label(c: str, _sugs=sugs) -> str:
-                title_match = next((r.title_et for r in _sugs if r.code == c), "")
-                return f"{c} — {title_match[:60]}" if title_match else c
-
-            edited_legal_codes = st.multiselect(
-                "Ссылки на закон",
-                options=available_codes,
-                default=f.legal_ref_codes,
-                format_func=_ref_label,
-                key=f"refs_{scope}_{i}",
+        # ---- Inline edit (plain widgets — not a form so all action buttons
+        # can sit in one row including Save). ----
+        ec1, ec2 = st.columns([1, 3])
+        with ec1:
+            edited_section = st.selectbox(
+                "Раздел",
+                options=SECTION_KEYS,
+                index=SECTION_KEYS.index(f.section_ref) if f.section_ref in SECTION_KEYS else 0,
+                format_func=lambda x: SECTION_LABELS[x],
+                key=f"sec_{scope}_{i}",
+            )
+            edited_severity = st.selectbox(
+                "Серьёзность",
+                options=SEVERITY_OPTIONS,
+                index=SEVERITY_OPTIONS.index(f.severity),
+                format_func=lambda s: SEVERITY_LABELS[s],
+                key=f"sev_{scope}_{i}",
+            )
+        with ec2:
+            edited_observation = st.text_area(
+                "Наблюдение",
+                value=f.observation_raw,
+                height=100,
+                key=f"obs_{scope}_{i}",
+            )
+            edited_recommendation = st.text_area(
+                "Рекомендация",
+                value=f.recommendation or "",
+                height=60,
+                key=f"rec_{scope}_{i}",
             )
 
-            saved = st.form_submit_button("💾 Сохранить", type="primary")
-            if saved:
-                if not edited_observation.strip():
-                    st.error("Наблюдение не может быть пустым.")
-                else:
-                    f.section_ref = edited_section
-                    f.severity = edited_severity
-                    f.observation_raw = edited_observation.strip()
-                    f.recommendation = edited_recommendation.strip() or None
-                    f.legal_ref_codes = edited_legal_codes
-                    set_current(audit)
-                    st.success("Изменения сохранены")
-                    st.rerun()
+        section_for_refs = edited_section if edited_section else f.section_ref
+        sugs = _legal_refs_for(section_for_refs)
+        available_codes = sorted({r.code for r in sugs} | set(f.legal_ref_codes))
 
-        # ---- Action row: AI buttons + Delete, immediately after form ----
+        def _ref_label(c: str, _sugs=sugs) -> str:
+            title_match = next((r.title_et for r in _sugs if r.code == c), "")
+            return f"{c} — {title_match[:60]}" if title_match else c
+
+        edited_legal_codes = st.multiselect(
+            "Ссылки на закон",
+            options=available_codes,
+            default=f.legal_ref_codes,
+            format_func=_ref_label,
+            key=f"refs_{scope}_{i}",
+        )
+
+        # ---- Action row: Save + AI buttons + Delete, all on ONE line ----
         polish_disabled = is_locked(f.section_ref)
         in_delete = st.session_state._pending_delete == i
 
         if in_delete:
-            # Confirm/cancel delete fills the row when active
             dc1, dc2, _ = st.columns([1, 1, 3])
             if dc1.button(
                 "✅ Подтвердить удаление", key=f"confirm_del_{scope}_{i}", type="primary"
@@ -372,37 +366,55 @@ for i, f in enumerate(audit.findings):
                 st.session_state._pending_delete = None
                 st.rerun()
         else:
-            cols = st.columns([1, 1, 1, 1])
+            b1, b2, b3, b4 = st.columns(4)
+            save_clicked = b1.button(
+                "💾 Сохранить",
+                key=f"save_{scope}_{i}",
+                type="primary",
+                use_container_width=True,
+            )
             polish_clicked = False
             rank_clicked = False
             if llm_on:
-                with cols[0]:
-                    polish_clicked = st.button(
-                        "✏️ Polish",
-                        key=f"polish_btn_{scope}_{i}",
-                        disabled=polish_disabled,
-                        help=(
-                            "Sonnet поправит грамматику и терминологию, не меняя факты."
-                            if not polish_disabled
-                            else "Раздел 11/14 — только аудитор."
-                        ),
-                        use_container_width=True,
-                    )
-                with cols[1]:
-                    rank_clicked = st.button(
-                        "💡 Ссылки",
-                        key=f"rank_btn_{scope}_{i}",
-                        help="Haiku ранжирует подходящие ссылки из курируемого списка.",
-                        use_container_width=True,
-                    )
-            with cols[3]:
-                if st.button(
-                    "🗑️ Удалить",
-                    key=f"del_{scope}_{i}",
+                polish_clicked = b2.button(
+                    "✏️ Polish",
+                    key=f"polish_btn_{scope}_{i}",
+                    disabled=polish_disabled,
+                    help=(
+                        "Sonnet поправит грамматику и терминологию, не меняя факты."
+                        if not polish_disabled
+                        else "Раздел 11/14 — только аудитор."
+                    ),
                     use_container_width=True,
-                ):
-                    st.session_state._pending_delete = i
+                )
+                rank_clicked = b3.button(
+                    "💡 Ссылки",
+                    key=f"rank_btn_{scope}_{i}",
+                    help="Haiku ранжирует подходящие ссылки из курируемого списка.",
+                    use_container_width=True,
+                )
+            del_clicked = b4.button(
+                "🗑️ Удалить",
+                key=f"del_{scope}_{i}",
+                use_container_width=True,
+            )
+
+            if save_clicked:
+                if not edited_observation.strip():
+                    st.error("Наблюдение не может быть пустым.")
+                else:
+                    f.section_ref = edited_section
+                    f.severity = edited_severity
+                    f.observation_raw = edited_observation.strip()
+                    f.recommendation = edited_recommendation.strip() or None
+                    f.legal_ref_codes = edited_legal_codes
+                    set_current(audit)
+                    st.success("Изменения сохранены")
                     st.rerun()
+
+            if del_clicked:
+                st.session_state._pending_delete = i
+                st.rerun()
 
             if polish_clicked:
                 with st.status("Sonnet 4.6 правит грамматику…", expanded=True) as status:
@@ -458,7 +470,11 @@ for i, f in enumerate(audit.findings):
                 pa, pb = st.columns(2)
                 if pa.button("✅ Принять polish", key=f"polish_accept_{scope}_{i}"):
                     f.observation_raw = polished
-                    st.session_state[f"obs_{scope}_{i}"] = polished  # update widget
+                    # Same widget-state rule as the ranker — pop the text_area's
+                    # session_state key so it reseeds from value=f.observation_raw
+                    # on the next run instead of setting it (which Streamlit
+                    # forbids after the widget has rendered).
+                    st.session_state.pop(f"obs_{scope}_{i}", None)
                     del st.session_state[_polish_key(i)]
                     set_current(audit)
                     st.rerun()
@@ -484,12 +500,16 @@ for i, f in enumerate(audit.findings):
                     key=f"rank_accept_{scope}_{i}",
                     type="primary",
                 ):
-                    merged = list(dict.fromkeys([*f.legal_ref_codes, *ranked]))
-                    f.legal_ref_codes = merged
-                    # update the multiselect widget too so the new refs show in the form
-                    st.session_state[f"refs_{scope}_{i}"] = merged
+                    # Streamlit forbids writing the multiselect's widget-state
+                    # key (refs_…) after the widget has rendered this run. We
+                    # stash the merged list in a non-widget slot; the top of
+                    # the loop iteration applies it before the next render.
+                    current = st.session_state.get(
+                        f"refs_{scope}_{i}", f.legal_ref_codes
+                    )
+                    merged = list(dict.fromkeys([*current, *ranked]))
+                    st.session_state[f"_pending_refs_{scope}_{i}"] = merged
                     del st.session_state[_rank_key(i)]
-                    set_current(audit)
                     st.rerun()
                 if rb.button("❌ Отклонить", key=f"rank_reject_{scope}_{i}"):
                     del st.session_state[_rank_key(i)]

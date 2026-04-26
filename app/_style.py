@@ -54,53 +54,64 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
     padding-right: 2rem;
 }}
 
-/* Make the sidebar's user-content area a full-height flex column so the
-   version footer at the bottom can be pushed there with margin-top: auto.
-   Targets multiple Streamlit DOM versions (1.40+ uses stSidebarUserContent). */
-[data-testid="stSidebarUserContent"],
-[data-testid="stSidebar"] > div:first-child > div:nth-child(2) {{
-    display: flex;
-    flex-direction: column;
-    min-height: calc(100vh - 4rem);
+/* ---- Sidebar layout ---- */
+
+/* Make the user-content area a flex column that fills the remaining space
+   below the logo + nav. Footer with margin-top:auto then pins to the
+   bottom; logout/usage stack at the top, just below the nav. */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    padding-top: 0.5rem !important;
 }}
 
-/* Tighter sidebar padding so the logo + nav fit without scrolling. */
-[data-testid="stSidebarUserContent"] {{
-    padding-top: 1rem;
+/* Tighten the gap between nav and the logout/usage block. */
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
+    margin-bottom: 0.25rem !important;
 }}
 
-/* st.logo() places an <img> in stSidebarHeader. By default Streamlit
-   caps it well under the sidebar width — stretch it to match the menu
-   text width so the brand reads clearly. */
-[data-testid="stSidebarHeader"] {{
-    padding: 0.75rem 0.5rem 0.5rem 0.5rem !important;
+/* ---- Logo: stretch to full sidebar width ---- */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
+    padding: 0.75rem 0.75rem 0.5rem 0.75rem !important;
 }}
-[data-testid="stSidebarHeader"] a,
-[data-testid="stSidebarHeader"] > div,
-[data-testid="stLogo"] {{
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > a,
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > div {{
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stLogo"],
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
-}}
-[data-testid="stLogo"] {{
+    max-height: none !important;
     display: block !important;
     object-fit: contain !important;
 }}
 
-/* Version footer pinned to the bottom of the sidebar by margin-top: auto. */
+/* ---- Footer pinned at the very bottom of the sidebar ---- */
 .tadf-sidebar-footer {{
-    margin-top: auto;
-    padding-top: 0.75rem;
+    padding: 0.75rem 0.5rem 0.5rem 0.5rem;
     border-top: 1px solid rgba(128, 128, 128, 0.2);
     font-size: 0.72rem;
     color: rgba(128, 128, 128, 0.85);
     text-align: center;
-    line-height: 1.4;
+    line-height: 1.5;
 }}
 .tadf-sidebar-footer a {{
     color: inherit;
     text-decoration: none;
     border-bottom: 1px dotted rgba(128, 128, 128, 0.5);
+}}
+/* Push the footer's wrapper element (and any of its parents up to the
+   stSidebarUserContent flex column) to the bottom via margin-top:auto.
+   :has() is widely supported (Chrome 105+, Safari 15.4+, Firefox 121+). */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.tadf-sidebar-footer),
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:last-child {{
+    margin-top: auto !important;
 }}
 </style>
 """,
