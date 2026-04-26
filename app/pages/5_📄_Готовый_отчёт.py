@@ -7,16 +7,16 @@ _root = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_root))
 sys.path.insert(0, str(_root / 'src'))
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
-import streamlit as st
+import streamlit as st  # noqa: E402
 
-from app._state import get_current
-from tadf.config import AUDITS_DIR
-from tadf.db.repo import save_audit
-from tadf.db.session import session_scope
-from tadf.legal.checklist import check
-from tadf.render.docx_render import ChecklistFailed, render_to_path
+from app._state import get_current  # noqa: E402
+from tadf.config import AUDITS_DIR  # noqa: E402
+from tadf.db.repo import save_audit  # noqa: E402
+from tadf.db.session import session_scope  # noqa: E402
+from tadf.legal.checklist import check  # noqa: E402
+from tadf.render.docx_render import ChecklistFailed, render_to_path  # noqa: E402
 
 st.title("Готовый отчёт")
 

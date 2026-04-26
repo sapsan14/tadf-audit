@@ -7,14 +7,14 @@ _root = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_root))
 sys.path.insert(0, str(_root / 'src'))
 
-import hashlib
-from pathlib import Path
+import hashlib  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-import streamlit as st
+import streamlit as st  # noqa: E402
 
-from app._state import get_current, set_current
-from tadf.config import AUDITS_DIR
-from tadf.models import Photo
+from app._state import get_current, set_current  # noqa: E402
+from tadf.config import AUDITS_DIR  # noqa: E402
+from tadf.models import Photo  # noqa: E402
 
 st.title("Фотографии")
 

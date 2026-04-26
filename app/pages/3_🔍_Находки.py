@@ -5,17 +5,18 @@ import sys
 
 _root = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_root))
-sys.path.insert(0, str(_root / 'src'))
+sys.path.insert(0, str(_root / "src"))
 
-import streamlit as st
+import streamlit as st  # noqa: E402
 
-from app._state import get_current, set_current
-from tadf.legal.loader import for_section
-from tadf.models import Finding
+from app._state import get_current, set_current  # noqa: E402
+from tadf.legal.loader import for_section  # noqa: E402
+from tadf.models import Finding  # noqa: E402
 
 st.title("Находки и наблюдения")
 
 audit = get_current()
+scope = audit.id or "new"
 
 SECTION_OPTIONS = [
     ("4", "4. Hoone ülevaatus"),
@@ -38,78 +39,164 @@ SECTION_OPTIONS = [
 SECTION_KEYS = [s[0] for s in SECTION_OPTIONS]
 SECTION_LABELS = dict(SECTION_OPTIONS)
 
+SEVERITY_OPTIONS = ["info", "nonconf_minor", "nonconf_major", "hazard"]
+SEVERITY_LABELS = {
+    "info": "📝 Инфо",
+    "nonconf_minor": "⚠️ Мелкое несоответствие",
+    "nonconf_major": "❗ Существенное несоответствие",
+    "hazard": "🛑 Опасность",
+}
+
+
+def _legal_refs_for(section_ref: str) -> list:
+    return for_section(section_ref.split(".")[0], audit.type)
+
+
+# ---------------------------------------------------------------------------
+# Add new finding
+# ---------------------------------------------------------------------------
 st.subheader("Добавить находку")
-with st.form("new_finding", clear_on_submit=True):
+with st.form(f"new_finding_{scope}", clear_on_submit=True):
     col1, col2 = st.columns([1, 3])
     with col1:
-        section = st.selectbox(
-            "Раздел",
-            options=SECTION_KEYS,
-            format_func=lambda k: SECTION_LABELS[k],
+        new_section = st.selectbox(
+            "Раздел", options=SECTION_KEYS, format_func=lambda x: SECTION_LABELS[x]
         )
-        severity = st.selectbox(
+        new_severity = st.selectbox(
             "Серьёзность",
-            options=["info", "nonconf_minor", "nonconf_major", "hazard"],
-            format_func=lambda s: {
-                "info": "📝 Инфо",
-                "nonconf_minor": "⚠️ Мелкое несоответствие",
-                "nonconf_major": "❗ Существенное несоответствие",
-                "hazard": "🛑 Опасность",
-            }[s],
+            options=SEVERITY_OPTIONS,
+            format_func=lambda s: SEVERITY_LABELS[s],
         )
     with col2:
-        observation = st.text_area(
-            "Наблюдение (тезисами или прозой; на эстонском)",
-            height=100,
+        new_observation = st.text_area(
+            "Наблюдение (тезисами или прозой; на эстонском)", height=100
         )
-        recommendation = st.text_area(
-            "Рекомендация (опционально)",
-            height=60,
-        )
+        new_recommendation = st.text_area("Рекомендация (опционально)", height=60)
 
-    # Suggested legal refs for this section
-    suggestions = for_section(section.split(".")[0], audit.type)
-    legal_codes = []
+    suggestions = _legal_refs_for(new_section)
+    new_legal_codes: list[str] = []
     if suggestions:
-        legal_codes = st.multiselect(
+        new_legal_codes = st.multiselect(
             "Ссылки на закон (предложения для этого раздела)",
             options=[r.code for r in suggestions],
-            format_func=lambda c: (
-                f"{c} — {next(r.title_et for r in suggestions if r.code == c)[:60]}"
-            ),
+            format_func=lambda c: f"{c} — {next(r.title_et for r in suggestions if r.code == c)[:60]}",
         )
 
-    submitted = st.form_submit_button("Добавить находку", type="primary")
-    if submitted and observation.strip():
+    if st.form_submit_button("➕ Добавить находку", type="primary") and new_observation.strip():
         audit.findings.append(
             Finding(
-                section_ref=section,
-                severity=severity,
-                observation_raw=observation.strip(),
-                recommendation=recommendation.strip() or None,
-                legal_ref_codes=legal_codes,
+                section_ref=new_section,
+                severity=new_severity,
+                observation_raw=new_observation.strip(),
+                recommendation=new_recommendation.strip() or None,
+                legal_ref_codes=new_legal_codes,
             )
         )
         set_current(audit)
         st.success("Находка добавлена")
+        st.rerun()
 
+
+# ---------------------------------------------------------------------------
+# Edit / delete existing findings
+# ---------------------------------------------------------------------------
 st.subheader(f"Все находки ({len(audit.findings)})")
 if not audit.findings:
     st.caption(
-        "Пока нет находок. Добавьте хотя бы одну в каждый из обязательных разделов: 11 (Kokkuvõte) и 14 (Lõpphinnang)."
+        "Пока нет находок. Добавьте хотя бы одну в каждый из обязательных "
+        "разделов: 11 (Kokkuvõte) и 14 (Lõpphinnang)."
     )
 
+# Track which finding is in delete-confirm mode
+if "_pending_delete" not in st.session_state:
+    st.session_state._pending_delete = None
+
 for i, f in enumerate(audit.findings):
-    title = f"{i + 1}. [{f.section_ref}] {f.observation_raw[:80]}"
-    with st.expander(title):
-        st.write(f"**Раздел:** {SECTION_LABELS.get(f.section_ref, f.section_ref)}")
-        st.write(f"**Серьёзность:** {f.severity}")
-        st.write(f"**Наблюдение:** {f.observation_raw}")
-        if f.recommendation:
-            st.write(f"**Рекомендация:** {f.recommendation}")
-        if f.legal_ref_codes:
-            st.write(f"**Ссылки:** {', '.join(f.legal_ref_codes)}")
-        if st.button("Удалить", key=f"del_{i}"):
-            audit.findings.pop(i)
-            set_current(audit)
-            st.rerun()
+    severity_icon = SEVERITY_LABELS[f.severity].split(" ", 1)[0]
+    title = f"{i + 1}. {severity_icon} [{f.section_ref}] {f.observation_raw[:70]}"
+    expanded = st.session_state._pending_delete == i
+    with st.expander(title, expanded=expanded):
+        # ---- Inline edit form ----
+        with st.form(f"edit_finding_{scope}_{i}"):
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                edited_section = st.selectbox(
+                    "Раздел",
+                    options=SECTION_KEYS,
+                    index=SECTION_KEYS.index(f.section_ref) if f.section_ref in SECTION_KEYS else 0,
+                    format_func=lambda x: SECTION_LABELS[x],
+                    key=f"sec_{scope}_{i}",
+                )
+                edited_severity = st.selectbox(
+                    "Серьёзность",
+                    options=SEVERITY_OPTIONS,
+                    index=SEVERITY_OPTIONS.index(f.severity),
+                    format_func=lambda s: SEVERITY_LABELS[s],
+                    key=f"sev_{scope}_{i}",
+                )
+            with col2:
+                edited_observation = st.text_area(
+                    "Наблюдение",
+                    value=f.observation_raw,
+                    height=100,
+                    key=f"obs_{scope}_{i}",
+                )
+                edited_recommendation = st.text_area(
+                    "Рекомендация",
+                    value=f.recommendation or "",
+                    height=60,
+                    key=f"rec_{scope}_{i}",
+                )
+
+            # Legal refs — show suggestions for the *current* section, but also
+            # preserve any refs already attached even if they're outside the suggestion list.
+            section_for_refs = edited_section if edited_section else f.section_ref
+            suggestions = _legal_refs_for(section_for_refs)
+            available_codes = sorted({r.code for r in suggestions} | set(f.legal_ref_codes))
+
+            def _ref_label(c: str, _sugs=suggestions) -> str:
+                title_match = next((r.title_et for r in _sugs if r.code == c), "")
+                return f"{c} — {title_match[:60]}" if title_match else c
+
+            edited_legal_codes = st.multiselect(
+                "Ссылки на закон",
+                options=available_codes,
+                default=f.legal_ref_codes,
+                format_func=_ref_label,
+                key=f"refs_{scope}_{i}",
+            )
+
+            saved = st.form_submit_button("💾 Сохранить", type="primary")
+            if saved:
+                if not edited_observation.strip():
+                    st.error("Наблюдение не может быть пустым.")
+                else:
+                    f.section_ref = edited_section
+                    f.severity = edited_severity
+                    f.observation_raw = edited_observation.strip()
+                    f.recommendation = edited_recommendation.strip() or None
+                    f.legal_ref_codes = edited_legal_codes
+                    set_current(audit)
+                    st.success("Изменения сохранены")
+                    st.rerun()
+
+        # ---- Delete (outside form, with confirm) ----
+        st.divider()
+        if st.session_state._pending_delete == i:
+            cdel1, cdel2 = st.columns(2)
+            with cdel1:
+                if st.button(
+                    "✅ Подтвердить удаление", key=f"confirm_del_{scope}_{i}", type="primary"
+                ):
+                    audit.findings.pop(i)
+                    st.session_state._pending_delete = None
+                    set_current(audit)
+                    st.rerun()
+            with cdel2:
+                if st.button("Отмена", key=f"cancel_del_{scope}_{i}"):
+                    st.session_state._pending_delete = None
+                    st.rerun()
+        else:
+            if st.button("🗑️ Удалить находку", key=f"del_{scope}_{i}"):
+                st.session_state._pending_delete = i
+                st.rerun()
