@@ -165,13 +165,9 @@ b.fire_class = st.selectbox(
 st.subheader("Проектировщик / строитель")
 col1, col2 = st.columns(2)
 with col1:
-    b.designer = (
-        st.text_input("Designer (projekteerija)", value=b.designer or "", key=k("designer")) or None
-    )
+    b.designer = st.text_input("Designer (projekteerija)", value=b.designer or "", key=k("designer")) or None
 with col2:
-    b.builder = (
-        st.text_input("Builder (ehitaja)", value=b.builder or "", key=k("builder")) or None
-    )
+    b.builder = st.text_input("Builder (ehitaja)", value=b.builder or "", key=k("builder")) or None
 
 if b.pre_2003:
     b.substitute_docs_note = (

@@ -10,7 +10,7 @@ from docxtpl import DocxTemplate
 from tadf.legal.checklist import check
 from tadf.models import Audit
 from tadf.render.context_builder import build_context
-from tadf.templates import EA_KASUTUSEELNE
+from tadf.templates import template_for
 
 
 class ChecklistFailed(Exception):
@@ -25,16 +25,22 @@ def render_to_path(
     audit: Audit,
     out_dir: Path,
     *,
-    template_path: Path = EA_KASUTUSEELNE,
+    template_path: Path | None = None,
     enforce_checklist: bool = True,
 ) -> Path:
-    """Render `audit` to `out_dir/draft.docx`. Also writes `context.json`."""
+    """Render `audit` to `out_dir/draft.docx`. Also writes `context.json`.
+
+    The template is picked by audit subtype unless `template_path` is given.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if enforce_checklist:
         missing = check(audit)
         if missing:
             raise ChecklistFailed(missing)
+
+    if template_path is None:
+        template_path = template_for(audit.subtype)
 
     ctx = build_context(audit)
 

@@ -75,9 +75,7 @@ class AuditRow(Base):
     visit_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     composer_id: Mapped[int] = mapped_column(ForeignKey("auditor.id"))
     reviewer_id: Mapped[int] = mapped_column(ForeignKey("auditor.id"))
@@ -88,12 +86,8 @@ class AuditRow(Base):
     reviewer: Mapped[AuditorRow] = relationship(foreign_keys=[reviewer_id])
     building: Mapped[BuildingRow] = relationship()
     client: Mapped[ClientRow | None] = relationship()
-    findings: Mapped[list[FindingRow]] = relationship(
-        back_populates="audit", cascade="all, delete-orphan"
-    )
-    photos: Mapped[list[PhotoRow]] = relationship(
-        back_populates="audit", cascade="all, delete-orphan"
-    )
+    findings: Mapped[list[FindingRow]] = relationship(back_populates="audit", cascade="all, delete-orphan")
+    photos: Mapped[list[PhotoRow]] = relationship(back_populates="audit", cascade="all, delete-orphan")
 
 
 class FindingRow(Base):

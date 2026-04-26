@@ -16,9 +16,7 @@ class Building(BaseModel):
 
     id: int | None = None
     address: str
-    kataster_no: str | None = Field(
-        default=None, description="Kinnistu katastritunnus, e.g. 85101:004:0020"
-    )
+    kataster_no: str | None = Field(default=None, description="Kinnistu katastritunnus, e.g. 85101:004:0020")
     ehr_code: str | None = Field(default=None, description="Ehitisregistri kood, 7-12 digits")
     use_purpose: str | None = Field(default=None, description="Ehitise kasutusotstarve")
     construction_year: int | None = None

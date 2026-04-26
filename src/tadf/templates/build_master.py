@@ -1,9 +1,9 @@
-"""Build the docxtpl master template `ea_kasutuseelne.docx` programmatically.
+"""Build the docxtpl master templates programmatically — one per audit subtype.
 
-The Phase 1 master is generated from code so we can version-control it as a
-script rather than as opaque binary. Once the template stabilises and Fjodor
+The Phase 1 masters are generated from code so we can version-control them as a
+script rather than as opaque binaries. Once the template stabilises and Fjodor
 wants visual tweaks (fonts, headers, signatures with images) we switch to
-hand-edited .docx — but for the MVP this keeps the loop fast.
+hand-edited .docx per subtype — but for the MVP this keeps the loop fast.
 
 Run via:
     uv run python -m tadf.templates.build_master
@@ -17,7 +17,8 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 
-OUT = Path(__file__).parent / "ea_kasutuseelne.docx"
+TEMPLATES_DIR = Path(__file__).parent
+SUBTYPES = ("kasutuseelne", "korraline", "erakorraline")
 
 
 def _h(doc: Document, text: str, level: int = 1) -> None:
@@ -35,7 +36,7 @@ def _p(doc: Document, text: str, *, bold: bool = False, center: bool = False) ->
     run.font.size = Pt(11)
 
 
-def build() -> Path:
+def build(subtype: str = "kasutuseelne") -> Path:
     doc = Document()
 
     # ---------- 0. TITTELLEHT ----------
@@ -174,11 +175,18 @@ def build() -> Path:
     doc.add_paragraph()
     _p(doc, "{{ retention_notice }}")
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(OUT)
-    return OUT
+    out = TEMPLATES_DIR / f"ea_{subtype}.docx"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(out)
+    return out
+
+
+def build_all() -> list[Path]:
+    """Build one template per subtype. Bodies are identical today; the variation
+    lives in `boilerplate.yaml` (audit_purpose) and `context_builder` (label)."""
+    return [build(s) for s in SUBTYPES]
 
 
 if __name__ == "__main__":
-    p = build()
-    print(f"wrote {p}")
+    for p in build_all():
+        print(f"wrote {p}")

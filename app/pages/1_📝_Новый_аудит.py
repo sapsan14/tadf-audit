@@ -5,7 +5,7 @@ import sys
 
 _root = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_root))
-sys.path.insert(0, str(_root / 'src'))
+sys.path.insert(0, str(_root / "src"))
 
 from datetime import date  # noqa: E402
 
@@ -20,9 +20,7 @@ with st.expander("Открыть сохранённый аудит", expanded=Fa
     saved = all_saved_audits()
     if saved:
         labels = [f"#{a.id} — {a.display_no()} — {a.building.address[:50]}" for a in saved]
-        idx = st.selectbox(
-            "Выберите аудит", options=range(len(saved)), format_func=lambda i: labels[i]
-        )
+        idx = st.selectbox("Выберите аудит", options=range(len(saved)), format_func=lambda i: labels[i])
         if st.button("Загрузить", type="primary"):
             reload_from_db(saved[idx].id)
             st.success(f"Загружен аудит #{saved[idx].id}")
@@ -94,12 +92,8 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Auditi koostas")
     audit.composer = Auditor(
-        full_name=st.text_input(
-            "Имя", value=audit.composer.full_name, key=k("composer_name")
-        ),
-        company=st.text_input(
-            "Компания", value=audit.composer.company or "", key=k("composer_company")
-        ),
+        full_name=st.text_input("Имя", value=audit.composer.full_name, key=k("composer_name")),
+        company=st.text_input("Компания", value=audit.composer.company or "", key=k("composer_company")),
         company_reg_nr=st.text_input(
             "Reg. nr", value=audit.composer.company_reg_nr or "", key=k("composer_reg")
         )
@@ -112,9 +106,7 @@ with col1:
 with col2:
     st.subheader("Auditi kontrollis (vastutav pädev isik)")
     audit.reviewer = Auditor(
-        full_name=st.text_input(
-            "Имя", value=audit.reviewer.full_name, key=k("reviewer_name")
-        ),
+        full_name=st.text_input("Имя", value=audit.reviewer.full_name, key=k("reviewer_name")),
         kutsetunnistus_no=st.text_input(
             "Kutsetunnistus №",
             value=audit.reviewer.kutsetunnistus_no or "",
@@ -127,9 +119,7 @@ with col2:
             key=k("reviewer_qual"),
         )
         or None,
-        company=st.text_input(
-            "Компания", value=audit.reviewer.company or "TADF", key=k("reviewer_company")
-        )
+        company=st.text_input("Компания", value=audit.reviewer.company or "TADF", key=k("reviewer_company"))
         or None,
     )
 
@@ -138,9 +128,7 @@ if audit.client is None:
     from tadf.models import Client
 
     audit.client = Client(name="")
-audit.client.name = st.text_input(
-    "Название / имя", value=audit.client.name, key=k("client_name")
-)
+audit.client.name = st.text_input("Название / имя", value=audit.client.name, key=k("client_name"))
 col1, col2, col3 = st.columns(3)
 with col1:
     audit.client.reg_code = (
@@ -148,17 +136,14 @@ with col1:
     )
 with col2:
     audit.client.contact_email = (
-        st.text_input("E-mail", value=audit.client.contact_email or "", key=k("client_email"))
-        or None
+        st.text_input("E-mail", value=audit.client.contact_email or "", key=k("client_email")) or None
     )
 with col3:
     audit.client.contact_phone = (
-        st.text_input("Телефон", value=audit.client.contact_phone or "", key=k("client_phone"))
-        or None
+        st.text_input("Телефон", value=audit.client.contact_phone or "", key=k("client_phone")) or None
     )
 audit.client.address = (
-    st.text_input("Адрес заказчика", value=audit.client.address or "", key=k("client_addr"))
-    or None
+    st.text_input("Адрес заказчика", value=audit.client.address or "", key=k("client_addr")) or None
 )
 
 set_current(audit)

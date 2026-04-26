@@ -56,9 +56,7 @@ class ParsedReport:
         return {
             "source_path": self.source_path,
             "cover": self.cover.__dict__,
-            "sections": [
-                {"number": s.number, "title": s.title, "body": s.body} for s in self.sections
-            ],
+            "sections": [{"number": s.number, "title": s.title, "body": s.body} for s in self.sections],
         }
 
 

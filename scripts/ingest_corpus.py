@@ -1,7 +1,7 @@
 """Parse historical audit reports under /audit/ into JSON snapshots in data/corpus/.
 
-Phase 1 only handles .docx (the one canonical modern report). Legacy .doc, PDF
-and .asice ingestion is added in later phases (LibreOffice + pdfplumber + zipfile).
+Handles .docx, .pdf and .asice. Legacy .doc requires LibreOffice (not assumed
+installed) and is skipped with a notice.
 """
 
 from __future__ import annotations
@@ -9,30 +9,49 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tadf.corpus.parse_asice import parse_asice
 from tadf.corpus.parse_docx import parse_docx
+from tadf.corpus.parse_pdf import parse_pdf
 
 ROOT = Path(__file__).resolve().parent.parent
 AUDIT_DIR = ROOT / "audit"
 OUT_DIR = ROOT / "data" / "corpus"
 
+PARSERS = {".docx": parse_docx, ".pdf": parse_pdf, ".asice": parse_asice}
+
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    docx_files = sorted(AUDIT_DIR.glob("*.docx"))
-    if not docx_files:
-        print(f"No .docx files in {AUDIT_DIR}")
+    if not AUDIT_DIR.exists():
+        print(f"No {AUDIT_DIR} folder — nothing to ingest.")
         return
 
-    for src in docx_files:
-        report = parse_docx(src)
+    files = sorted(AUDIT_DIR.iterdir())
+    parsed = skipped = 0
+    for src in files:
+        if not src.is_file():
+            continue
+        ext = src.suffix.lower()
+        parser = PARSERS.get(ext)
+        if parser is None:
+            print(f"  skip {src.name}  ({ext} not supported in Phase 1)")
+            skipped += 1
+            continue
+        try:
+            report = parser(src)
+        except Exception as e:
+            print(f"  ERR  {src.name}  → {e}")
+            skipped += 1
+            continue
         out = OUT_DIR / f"{src.stem}.json"
         out.write_text(
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        print(f"  wrote {out.relative_to(ROOT)}  ({len(report.sections)} sections)")
+        print(f"  ok   {src.name}  → {len(report.sections)} sections")
+        parsed += 1
 
-    print(f"\nIngested {len(docx_files)} .docx report(s) into {OUT_DIR.relative_to(ROOT)}")
+    print(f"\nIngested {parsed} report(s), skipped {skipped}.")
 
 
 if __name__ == "__main__":

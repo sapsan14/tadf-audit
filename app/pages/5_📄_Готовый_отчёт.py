@@ -5,7 +5,7 @@ import sys
 
 _root = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_root))
-sys.path.insert(0, str(_root / 'src'))
+sys.path.insert(0, str(_root / "src"))
 
 from pathlib import Path  # noqa: E402
 
@@ -29,7 +29,8 @@ if not missing:
 else:
     st.error(f"❌ Не заполнено {len(missing)} обязательных пункт(ов):")
     for m in missing:
-        st.write(f"- **{m.field}** → раздел *{m.section_hint}* — {m.why}")
+        with st.container(border=True):
+            st.markdown(f"**`{m.field}`** → форма «{m.section_hint}»  \n🇪🇪 {m.why_et}  \n🇷🇺 {m.why_ru}")
 
 st.header("Сохранить и собрать .docx")
 

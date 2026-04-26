@@ -12,32 +12,17 @@ import streamlit as st  # noqa: E402
 from app._state import get_current, set_current  # noqa: E402
 from tadf.legal.loader import for_section  # noqa: E402
 from tadf.models import Finding  # noqa: E402
+from tadf.sections import SECTION_KEYS, SECTION_LABELS  # noqa: E402
 
 st.title("Находки и наблюдения")
+st.caption(
+    "Выбор раздела опирается на структуру 14-секционного отчёта (Tiitelleht → "
+    "Allkirjad). Подразделы (6.1–6.15, 7.1–7.10, 8.1–8.13 и т.д.) добавлены "
+    "из стандартов EVS 812-7 / EVS 932 и из ваших старых отчётов."
+)
 
 audit = get_current()
 scope = audit.id or "new"
-
-SECTION_OPTIONS = [
-    ("4", "4. Hoone ülevaatus"),
-    ("5", "5. Arhitektuur"),
-    ("6", "6. Konstruktiivne osa"),
-    ("6.1", "6.1. Vundament"),
-    ("6.2", "6.2. Välisseinad"),
-    ("6.3", "6.3. Vahelaed"),
-    ("6.4", "6.4. Katus"),
-    ("6.5", "6.5. Viimistlus"),
-    ("6.6", "6.6. Aknad ja uksed"),
-    ("7", "7. Tehnosüsteemid"),
-    ("7.1", "7.1. Veevarustus ja kanalisatsioon"),
-    ("7.2", "7.2. Elektrivarustus"),
-    ("7.3", "7.3. Küte ja ventilatsioon"),
-    ("8", "8. Tulekaitse"),
-    ("11", "11. KOKKUVÕTE — только аудитор, без ИИ"),
-    ("14", "14. LÕPPHINNANG — только аудитор, без ИИ"),
-]
-SECTION_KEYS = [s[0] for s in SECTION_OPTIONS]
-SECTION_LABELS = dict(SECTION_OPTIONS)
 
 SEVERITY_OPTIONS = ["info", "nonconf_minor", "nonconf_major", "hazard"]
 SEVERITY_LABELS = {
@@ -59,18 +44,14 @@ st.subheader("Добавить находку")
 with st.form(f"new_finding_{scope}", clear_on_submit=True):
     col1, col2 = st.columns([1, 3])
     with col1:
-        new_section = st.selectbox(
-            "Раздел", options=SECTION_KEYS, format_func=lambda x: SECTION_LABELS[x]
-        )
+        new_section = st.selectbox("Раздел", options=SECTION_KEYS, format_func=lambda x: SECTION_LABELS[x])
         new_severity = st.selectbox(
             "Серьёзность",
             options=SEVERITY_OPTIONS,
             format_func=lambda s: SEVERITY_LABELS[s],
         )
     with col2:
-        new_observation = st.text_area(
-            "Наблюдение (тезисами или прозой; на эстонском)", height=100
-        )
+        new_observation = st.text_area("Наблюдение (тезисами или прозой; на эстонском)", height=100)
         new_recommendation = st.text_area("Рекомендация (опционально)", height=60)
 
     suggestions = _legal_refs_for(new_section)
@@ -185,9 +166,7 @@ for i, f in enumerate(audit.findings):
         if st.session_state._pending_delete == i:
             cdel1, cdel2 = st.columns(2)
             with cdel1:
-                if st.button(
-                    "✅ Подтвердить удаление", key=f"confirm_del_{scope}_{i}", type="primary"
-                ):
+                if st.button("✅ Подтвердить удаление", key=f"confirm_del_{scope}_{i}", type="primary"):
                     audit.findings.pop(i)
                     st.session_state._pending_delete = None
                     set_current(audit)

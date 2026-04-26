@@ -37,11 +37,7 @@ def _findings_for(audit: Audit, section_prefix: str) -> list[dict[str, Any]]:
     for f in audit.findings:
         if not f.section_ref.startswith(section_prefix):
             continue
-        text = (
-            f.observation_polished
-            if f.accepted_polished and f.observation_polished
-            else f.observation_raw
-        )
+        text = f.observation_polished if f.accepted_polished and f.observation_polished else f.observation_raw
         out.append({"observation": text, "severity": f.severity, "section_ref": f.section_ref})
     return out
 

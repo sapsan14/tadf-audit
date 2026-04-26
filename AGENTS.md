@@ -98,10 +98,10 @@ See `/home/anton/.claude/plans/look-into-audit-folder-playful-snail.md` for the 
 - **Phase 1 (local MVP):** not started. First action when implementation begins: scaffold `pyproject.toml`, ingest the 12-report corpus, build `ea_kasutuseelne.docx` master template.
 - All later phases: documented in the plan.
 
-## Open questions for Fjodor
+## Open questions for Fjodor — RESOLVED 2026-04-26
 
-These should be confirmed before Phase 3 work begins:
-1. Signing method — ID-card / Mobile-ID / Smart-ID?
-2. Is TADF an OÜ or FIE? (Affects X-tee eligibility for Phase 6.)
-3. Does his professional-liability insurer accept LLM-assisted drafting with auditor review?
-4. Which audit subtype is most common (drives which template ships in MVP — current guess: `ea_kasutuseelne`)?
+1. **Signing method:** **Smart-ID** (priority for Phase 3 implementation).
+2. **TADF legal form:** **OÜ** — eligible for X-tee membership, Phase 6 not blocked architecturally.
+3. **Insurer position:** **OK** with AI-assisted drafting + auditor review (conditions: diff-then-accept + methodology disclosure).
+4. **Most common subtype:** **erakorraline** — but ship all three (`erakorraline`, `kasutuseelne`, `korraline`).
+5. **Storage preference (new):** **local + remote duplicated** — Phase 5 must support bidirectional sync, not just cloud migration.

@@ -5,7 +5,7 @@ import sys
 
 _root = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_root))
-sys.path.insert(0, str(_root / 'src'))
+sys.path.insert(0, str(_root / "src"))
 
 import hashlib  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -15,6 +15,8 @@ import streamlit as st  # noqa: E402
 from app._state import get_current, set_current  # noqa: E402
 from tadf.config import AUDITS_DIR  # noqa: E402
 from tadf.models import Photo  # noqa: E402
+from tadf.sections import SECTION_KEYS as ALL_SECTION_KEYS  # noqa: E402
+from tadf.sections import SECTION_LABELS as ALL_SECTION_LABELS  # noqa: E402
 
 st.title("Фотографии")
 
@@ -34,9 +36,11 @@ uploaded = st.file_uploader(
 )
 
 if uploaded:
-    SECTION_REFS = ["4", "5", "6", "6.1", "6.2", "6.3", "6.4", "6.5", "6.6", "7", "8", "16"]
     default_section = st.selectbox(
-        "Раздел отчёта (по умолчанию для всех загруженных)", SECTION_REFS, index=0
+        "Раздел отчёта (по умолчанию для всех загруженных)",
+        options=ALL_SECTION_KEYS,
+        format_func=lambda k: ALL_SECTION_LABELS[k],
+        index=ALL_SECTION_KEYS.index("16") if "16" in ALL_SECTION_KEYS else 0,
     )
     if st.button(f"Сохранить {len(uploaded)} фото", type="primary"):
         for f in uploaded:
@@ -63,12 +67,8 @@ for i, p in enumerate(audit.photos):
     with cols[i % 3]:
         path = Path(p.path)
         if path.exists():
-            st.image(
-                str(path), caption=f"[{p.section_ref}] {p.caption_auditor or ''}", width="stretch"
-            )
-        new_caption = st.text_input(
-            f"Подпись #{i + 1}", value=p.caption_auditor or "", key=f"cap_{i}"
-        )
+            st.image(str(path), caption=f"[{p.section_ref}] {p.caption_auditor or ''}", width="stretch")
+        new_caption = st.text_input(f"Подпись #{i + 1}", value=p.caption_auditor or "", key=f"cap_{i}")
         new_section = st.text_input(f"Раздел #{i + 1}", value=p.section_ref or "16", key=f"sec_{i}")
         p.caption_auditor = new_caption
         p.section_ref = new_section

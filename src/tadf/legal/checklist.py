@@ -5,6 +5,9 @@ provisions of Ehitusseadustik (105032015001).
 This is the gate that runs immediately before render. A failing check returns
 the list of missing items so the UI can point the auditor back to the relevant
 form page.
+
+Each CheckResult provides bilingual `why` text (Estonian + Russian) so the §5
+report panel is readable in either language.
 """
 
 from __future__ import annotations
@@ -18,10 +21,16 @@ from tadf.models import Audit
 class CheckResult:
     field: str
     section_hint: str
-    why: str
+    why_et: str
+    why_ru: str
+
+    @property
+    def why(self) -> str:
+        """Two-line bilingual message: Estonian first, then Russian."""
+        return f"🇪🇪 {self.why_et}\n🇷🇺 {self.why_ru}"
 
     def __str__(self) -> str:
-        return f"[{self.field}] missing: {self.why}  (form section: {self.section_hint})"
+        return f"[{self.field}] {self.why_et} / {self.why_ru}  (form: {self.section_hint})"
 
 
 def check(audit: Audit) -> list[CheckResult]:
@@ -30,25 +39,39 @@ def check(audit: Audit) -> list[CheckResult]:
 
     if not audit.purpose:
         missing.append(
-            CheckResult("audit.purpose", "Üldosa", "§5 requires audit objective (auditi eesmärk)")
+            CheckResult(
+                "audit.purpose",
+                "Üldosa",
+                "§5 nõuab auditi eesmärki (auditi liik ja põhjus)",
+                "§5 требует указать цель аудита (вид и причину)",
+            )
         )
     if not audit.scope:
         missing.append(
-            CheckResult("audit.scope", "Üldosa", "§5 requires audit scope (auditi ulatus)")
+            CheckResult(
+                "audit.scope",
+                "Üldosa",
+                "§5 nõuab auditi ulatuse kirjeldust",
+                "§5 требует описание области аудита",
+            )
         )
     if not audit.visit_date:
         missing.append(
             CheckResult(
                 "audit.visit_date",
                 "Üldosa",
-                "§5 requires visual inspection date (paikvaatluse kuupäev)",
+                "§5 nõuab paikvaatluse kuupäeva",
+                "§5 требует дату визуального осмотра",
             )
         )
 
     if not audit.reviewer.full_name:
         missing.append(
             CheckResult(
-                "reviewer.full_name", "Allkirjad", "§5 requires the responsible auditor's full name"
+                "reviewer.full_name",
+                "Allkirjad",
+                "§5 nõuab vastutava pädeva isiku täisnime",
+                "§5 требует ФИО ответственного лица (vastutav pädev isik)",
             )
         )
     if not audit.reviewer.kutsetunnistus_no:
@@ -56,14 +79,18 @@ def check(audit: Audit) -> list[CheckResult]:
             CheckResult(
                 "reviewer.kutsetunnistus_no",
                 "Allkirjad",
-                "§5 requires the responsible auditor's kutsetunnistus number",
+                "§5 nõuab vastutava pädeva isiku kutsetunnistuse numbrit",
+                "§5 требует номер kutsetunnistus ответственного лица",
             )
         )
 
     if not audit.composer.full_name:
         missing.append(
             CheckResult(
-                "composer.full_name", "Allkirjad", "§5 requires the composing auditor's full name"
+                "composer.full_name",
+                "Allkirjad",
+                "§5 nõuab auditi koostaja täisnime",
+                "§5 требует ФИО составителя аудита (Auditi koostas)",
             )
         )
 
@@ -71,7 +98,10 @@ def check(audit: Audit) -> list[CheckResult]:
     if not b.address:
         missing.append(
             CheckResult(
-                "building.address", "Ehitis", "§5 requires building identification (address)"
+                "building.address",
+                "Ehitis",
+                "§5 nõuab ehitise aadressi",
+                "§5 требует адрес объекта",
             )
         )
     if not b.kataster_no and not b.ehr_code:
@@ -79,7 +109,8 @@ def check(audit: Audit) -> list[CheckResult]:
             CheckResult(
                 "building.kataster_no | ehr_code",
                 "Ehitis",
-                "§5 requires unique building identifier (katastritunnus or ehitisregistri kood)",
+                "§5 nõuab unikaalset identifikaatorit (katastritunnus või EHR-kood)",
+                "§5 требует уникальный идентификатор (katastritunnus или EHR-код)",
             )
         )
     if b.construction_year is None and not b.substitute_docs_note:
@@ -87,7 +118,14 @@ def check(audit: Audit) -> list[CheckResult]:
             CheckResult(
                 "building.construction_year",
                 "Ehitis",
-                "§5 requires construction date; if unknown, fill substitute_docs_note (EhSRS § 28)",
+                (
+                    "§5 nõuab ehitusaastat; kui see puudub, täida 'Pre-2003 ehitis' "
+                    "ja substitute_docs_note (EhSRS § 28)"
+                ),
+                (
+                    "§5 требует год постройки; если не известно — поставьте "
+                    "'Pre-2003 ehitis' и заполните substitute_docs_note (EhSRS § 28)"
+                ),
             )
         )
     if b.footprint_m2 is None:
@@ -95,7 +133,8 @@ def check(audit: Audit) -> list[CheckResult]:
             CheckResult(
                 "building.footprint_m2",
                 "Tehnilised näitajad",
-                "RT 110062015008 requires ehitisealune pind",
+                "RT 110062015008 nõuab ehitisealust pinda (m²)",
+                "RT 110062015008 требует ehitisealune pind (площадь застройки, m²)",
             )
         )
 
@@ -108,7 +147,8 @@ def check(audit: Audit) -> list[CheckResult]:
             CheckResult(
                 "findings[section=11]",
                 "Kokkuvõte",
-                "Kokkuvõte (section 11) must contain at least one auditor-written finding",
+                "Kokkuvõte (jaotus 11) peab sisaldama vähemalt ühte audiitori-koostatud lõiku",
+                "Kokkuvõte (раздел 11) должен содержать хотя бы одну запись от аудитора",
             )
         )
     if not has_final:
@@ -116,12 +156,12 @@ def check(audit: Audit) -> list[CheckResult]:
             CheckResult(
                 "findings[section=14]",
                 "Lõpphinnang",
-                "Lõpphinnang (section 14) must contain at least one auditor-written finding",
+                "Lõpphinnang (jaotus 14) peab sisaldama vähemalt ühte audiitori-koostatud lõiku",
+                "Lõpphinnang (раздел 14) должен содержать хотя бы одну запись от аудитора",
             )
         )
 
     # Conditional: fire-safety section (8) only when fire_class is set
-    # — flag warning if fire_class is set but no findings exist for section 8.
     if b.fire_class is not None:
         has_fire = any(f.section_ref.startswith("8") for f in audit.findings)
         if not has_fire:
@@ -129,7 +169,14 @@ def check(audit: Audit) -> list[CheckResult]:
                 CheckResult(
                     "findings[section=8]",
                     "Tulekaitse",
-                    "fire_class is set but no fire-safety findings — required by Tuleohutuse seadus",
+                    (
+                        "Tulepüsivusklass on määratud, kuid tuleohutuse jaotuses (8) "
+                        "ei ole ühtegi leidu — Tuleohutuse seadus nõuab"
+                    ),
+                    (
+                        "Указан класс огнестойкости, но в разделе пожарной безопасности (8) "
+                        "нет ни одной находки — требуется по Tuleohutuse seadus"
+                    ),
                 )
             )
 

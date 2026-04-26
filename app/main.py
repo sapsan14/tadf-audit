@@ -20,6 +20,8 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import streamlit as st  # noqa: E402
 
+from tadf.config import ROOT  # noqa: E402
+from tadf.corpus.preload import preload_corpus  # noqa: E402
 from tadf.db.session import init_db  # noqa: E402
 
 st.set_page_config(
@@ -30,6 +32,23 @@ st.set_page_config(
 )
 
 init_db()
+
+
+@st.cache_resource
+def _preload_corpus_once() -> tuple[int, int]:
+    """Idempotent preload of historical reports under /audit/.
+
+    Cached at process scope so it runs once per Streamlit worker. Skips entirely
+    on Streamlit Cloud (no /audit/ folder there) — only runs on local installs
+    where Fjodor has the original audit folder.
+    """
+    audit_dir = ROOT / "audit"
+    if not audit_dir.exists():
+        return (0, 0)
+    return preload_corpus(audit_dir)
+
+
+_imported, _skipped = _preload_corpus_once()
 
 st.title("TADF — Помощник аудитора")
 st.markdown(
@@ -53,6 +72,12 @@ st.info(
     "MVP-фаза: ИИ-помощь и подписание ASiC-E подключаются на следующих этапах. "
     "Сейчас программа полностью локальная, без обращения к внешним сервисам."
 )
+
+if _imported:
+    st.success(
+        f"📥 Предзагружено {_imported} исторических отчётов из папки `audit/` "
+        f"в базу. Откройте «Новый аудит» → «Открыть сохранённый аудит» для просмотра."
+    )
 
 # Cloud-environment warning. Streamlit Community Cloud sets HOSTNAME to
 # something starting with 'streamlit' on its workers.
