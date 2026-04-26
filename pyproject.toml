@@ -1,7 +1,7 @@
 [project]
 name = "tadf"
-version = "0.1.0"
-description = "TADF building-audit report automation (ehitise auditi aruanne)"
+version = "0.2.0"
+description = "TADF Ehitus OÜ — building-audit report automation (ehitise auditi aruanne)"
 requires-python = ">=3.12"
 dependencies = [
   "streamlit>=1.40",

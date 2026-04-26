@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Favicon variant: simplified to render at 16/32px. Drops the wall and
+     keeps just the chevron + "TADF" text. -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 800 600"
+     role="img"
+     aria-label="TADF"
+     fill="currentColor">
+  <title>TADF</title>
+  <path d="M 100 350 L 400 100 L 700 350"
+        stroke="currentColor" stroke-width="56"
+        fill="none"/>
+  <text x="400" y="540"
+        text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-weight="900"
+        font-size="280"
+        letter-spacing="-4">TADF</text>
+</svg>

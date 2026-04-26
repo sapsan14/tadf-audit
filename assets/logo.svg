@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  TADF Ehitus OÜ logo. Geometric reconstruction of the company mark:
+  ├── chevron (roof) — peak at 50%, descending lines to ~85% width
+  ├── "TADF" — heavy sans-serif wordmark
+  ├── "EHITUS OÜ" — wide-tracked subtitle
+  └── three rows of brick masonry (running bond pattern), 5–6 bricks per row
+
+  Designed to render identically in light and dark mode (currentColor)
+  and to scale from 16px favicons to full-page banners.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 800 800"
+     role="img"
+     aria-label="TADF Ehitus OÜ"
+     fill="currentColor">
+  <title>TADF Ehitus OÜ</title>
+
+  <!-- Roof chevron -->
+  <path d="M 90 310 L 400 80 L 710 310"
+        stroke="currentColor" stroke-width="42"
+        fill="none"
+        stroke-linecap="butt" stroke-linejoin="miter"/>
+
+  <!-- TADF wordmark -->
+  <text x="400" y="430"
+        text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-weight="900"
+        font-size="160"
+        letter-spacing="-2">TADF</text>
+
+  <!-- EHITUS OÜ subtitle -->
+  <text x="400" y="525"
+        text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif"
+        font-weight="700"
+        font-size="86"
+        letter-spacing="2">EHITUS OÜ</text>
+
+  <!-- Brick wall — three rows, running-bond offset, hollow rectangles -->
+  <g stroke="currentColor" stroke-width="6" fill="none">
+    <!-- Row 1 (top of wall): full bricks -->
+    <rect x="120"  y="570" width="112" height="48"/>
+    <rect x="244"  y="570" width="112" height="48"/>
+    <rect x="368"  y="570" width="112" height="48"/>
+    <rect x="492"  y="570" width="112" height="48"/>
+    <rect x="616"  y="570" width="64"  height="48"/>
+
+    <!-- Row 2: half-offset (running bond) -->
+    <rect x="60"   y="630" width="68"  height="48"/>
+    <rect x="140"  y="630" width="112" height="48"/>
+    <rect x="264"  y="630" width="112" height="48"/>
+    <rect x="388"  y="630" width="112" height="48"/>
+    <rect x="512"  y="630" width="112" height="48"/>
+    <rect x="636"  y="630" width="104" height="48"/>
+
+    <!-- Row 3 (bottom): full bricks -->
+    <rect x="80"   y="690" width="112" height="48"/>
+    <rect x="204"  y="690" width="112" height="48"/>
+    <rect x="328"  y="690" width="112" height="48"/>
+    <rect x="452"  y="690" width="112" height="48"/>
+    <rect x="576"  y="690" width="112" height="48"/>
+    <rect x="700"  y="690" width="60"  height="48"/>
+  </g>
+</svg>

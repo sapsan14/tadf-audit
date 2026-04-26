@@ -31,7 +31,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import streamlit as st  # noqa: E402
 
-from app._style import apply_consistent_layout  # noqa: E402
+from app._style import apply_consistent_layout, render_footer  # noqa: E402
 
 apply_consistent_layout("TADF Ehitus")
 
@@ -98,3 +98,6 @@ with st.sidebar:
 
 # Run the active page (declared above)
 nav.run()
+
+# Footer — version + copyright line, always at the bottom.
+render_footer()
