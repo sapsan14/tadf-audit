@@ -1,0 +1,32 @@
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+.venv
+.env
+.env.local
+
+# SENSITIVE — real client audit reports, never commit
+/audit/
+
+# Local data — audits, photos, caches, DB
+/data/audits/*
+!/data/audits/.gitkeep
+/data/cache/
+/data/corpus/*.json
+*.db
+*.db-journal
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+
+# Editor
+.idea/
+.vscode/
+
+# OS
+.DS_Store

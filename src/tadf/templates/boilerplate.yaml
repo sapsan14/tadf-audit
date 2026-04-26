@@ -1,0 +1,47 @@
+# Versioned standard clauses, keyed by section_key + audit_subtype.
+# Used by the render pipeline to fill boilerplate slots in the docxtpl master.
+
+version: "v1"
+
+independence_declaration: |
+  Käesolevaga kinnitan, et auditi koostaja ja vastutav pädev isik on sõltumatud
+  ehitise omanikust, projekteerijast, ehitajast ning toodete tarnijatest ja
+  paigaldajatest. Auditi koostamisel ei esine huvide konflikti.
+
+methodology:
+  v1: |
+    Audit on läbi viidud järgmiste metoodiliste sammude alusel:
+    1. Dokumentide kontroll — esitatud ehitusprojekti, kasutusloa taotluse ja
+       muude tellija poolt esitatud dokumentide süstemaatiline läbivaatus.
+    2. Visuaalne ülevaatus — paikvaatlus objektil, mille käigus hinnatakse
+       hoone konstruktsioonide, tehnosüsteemide ja arhitektuurse lahenduse
+       seisukorda ning vastavust kehtivatele nõuetele.
+    3. Tehniline analüüs — kogutud info võrdlemine kehtivate normdokumentidega
+       (Ehitusseadustik, MKM määrused, EVS standardid).
+    4. Järelduste koostamine — kokkuvõtte ja lõpphinnangu vormistamine,
+       sealhulgas vajalike täiendavate tegevuste loetelu.
+
+    Tehisintellekti abi on käesoleva aruande mustandi koostamisel kasutatud
+    eraldi narratiivsete osade kirjapanekul auditi koostaja juhendamisel ja
+    täielikul järelevalvel; iga lõik on auditi vastutava pädeva isiku poolt
+    kontrollitud ja heaks kiidetud enne käesoleva aruande allkirjastamist.
+
+retention_notice: |
+  Käesolev aruanne ja selle juurde kuuluvad lisad säilitatakse vähemalt 7 aastat
+  vastavalt Ehitusseadustiku ja Ehitise auditi tegemise korra nõuetele.
+
+# Per-subtype audit purpose templates — used as a default that the auditor edits.
+audit_purpose:
+  kasutuseelne: |
+    Ehitise auditi koostamine on tingitud omaniku soovist seadustada ehitis ja
+    saada kasutusluba. Auditi eesmärk on hinnata ehitise konstruktsioonide,
+    tehnosüsteemide ja arhitektuurse lahenduse vastavust kehtivatele nõuetele
+    ning hoone ohutust ja kasutamiskõlblikkust.
+  korraline: |
+    Käesolev korraline ehitise audit on koostatud Ehitusseadustiku § 18 alusel
+    eesmärgiga hinnata ehitise tehnilist seisukorda ja vastavust selle ehitamise
+    ajal kehtinud nõuetele.
+  erakorraline: |
+    Käesolev erakorraline ehitise audit on koostatud konkreetse sündmuse või
+    omaniku põhjendatud taotluse alusel, et hinnata ehitise või selle osa
+    seisukorda ja kasutamiskõlblikkust pärast asjaolu ilmnemist.

@@ -1,0 +1,72 @@
+# Canonical legal references used in TADF audit reports.
+# Seeded from the historical corpus + the nine riigiteataja acts.
+# LLM (Phase 2) ranks from this list — never invents new entries.
+
+- code: "EhS § 11"
+  title_et: "Ehitusseadustik § 11 — Ehitisele ja ehitamisele esitatavad nõuded"
+  url: "https://www.riigiteataja.ee/akt/105032015001"
+  section_keys: ["1", "2", "11"]
+
+- code: "EhS § 12"
+  title_et: "Ehitusseadustik § 12 — Ehitise kasutamine"
+  url: "https://www.riigiteataja.ee/akt/105032015001"
+  section_keys: ["1", "11"]
+
+- code: "EhS § 18"
+  title_et: "Ehitusseadustik § 18 — Ehitise audit"
+  url: "https://www.riigiteataja.ee/akt/105032015001"
+  section_keys: ["1", "12"]
+  audit_types: ["EA", "EP"]
+
+- code: "Ehitise auditi tegemise kord"
+  title_et: "MKM määrus 'Ehitise auditi tegemise kord'"
+  url: "https://www.riigiteataja.ee/akt/120102020004"
+  section_keys: ["12", "13"]
+
+- code: "Ehitise auditi tegemise kord § 5"
+  title_et: "Auditi aruande sisu nõuded"
+  url: "https://www.riigiteataja.ee/akt/120102020004"
+  section_keys: ["12"]
+
+- code: "Ehitise dokumendid ja juhendid"
+  title_et: "MKM määrus 'Nõuded ehitusprojekti, ehitise dokumentidele ja juhenditele'"
+  url: "https://www.riigiteataja.ee/akt/118022020009"
+  section_keys: ["12"]
+
+- code: "Nõuded ehitusprojektile"
+  title_et: "MKM määrus 'Nõuded ehitusprojektile'"
+  url: "https://www.riigiteataja.ee/akt/118072015007"
+  section_keys: ["7", "12"]
+
+- code: "Ehitise tehniliste andmete loetelu"
+  title_et: "MKM määrus 'Ehitise tehniliste andmete loetelu ja arvestamise alused'"
+  url: "https://www.riigiteataja.ee/akt/110062015008"
+  section_keys: ["10", "12"]
+
+- code: "EhSRS § 28"
+  title_et: "Ehitusseadustiku rakendamise seadus § 28 — pre-2003 ehitiste dokumenteerimine"
+  url: "https://www.riigiteataja.ee/akt/EhSRS"
+  section_keys: ["12"]
+
+- code: "EhSRS § 29"
+  title_et: "Ehitusseadustiku rakendamise seadus § 29 — post-2003 ehitiste audit"
+  url: "https://www.riigiteataja.ee/akt/EhSRS"
+  section_keys: ["12"]
+
+- code: "Tuleohutuse seadus"
+  title_et: "Tuleohutuse seadus"
+  url: "https://www.riigiteataja.ee/akt/13314859"
+  section_keys: ["8", "9"]
+
+- code: "Ehitisregistrile esitamise kord"
+  title_et: "MKM määrus 'Ehitisregistrile andmete esitamise kord'"
+  url: "https://www.riigiteataja.ee/akt/12939670"
+  section_keys: ["12"]
+
+- code: "EVS 812-7"
+  title_et: "Eesti standard EVS 812-7 — Ehitiste tuleohutus, osa 7"
+  section_keys: ["8", "9"]
+
+- code: "EVS 932"
+  title_et: "Eesti standard EVS 932 — Ehitusprojekt"
+  section_keys: ["7"]
