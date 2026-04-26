@@ -83,7 +83,7 @@ def require_login() -> stauth.Authenticate:
             location="main",
             fields={
                 "Form name": "🔐 TADF — вход",
-                "Username": "Логин",
+                "Username": "E-mail (логин)",
                 "Password": "Пароль",
                 "Login": "Войти",
             },
