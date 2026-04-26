@@ -95,7 +95,9 @@ See `/home/anton/.claude/plans/look-into-audit-folder-playful-snail.md` for the 
 ## Phase status
 
 - **Phase 0 (planning):** done.
-- **Phase 1 (local MVP):** not started. First action when implementation begins: scaffold `pyproject.toml`, ingest the 12-report corpus, build `ea_kasutuseelne.docx` master template.
+- **Phase 1 (local MVP):** **shipped.** Form + DOCX render + §5 checklist + SQLite + photo embed.
+- **Phase 2 (LLM assist):** **shipped.** All four helpers wired. Models: Sonnet 4.6 (drafter, polish), Haiku 4.5 (captioner, ranker). Key resolution: env var → `~/.anthropic/key` → Streamlit secrets.
+- **Phase 3 (signing):** not started. Smart-ID first per father's choice.
 - All later phases: documented in the plan.
 
 ## Open questions for Fjodor — RESOLVED 2026-04-26

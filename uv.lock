@@ -1505,9 +1505,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "anthropic" },
     { name = "docxtpl" },
     { name = "exifread" },
     { name = "httpx" },
+    { name = "pdfplumber" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "python-docx" },
@@ -1526,9 +1528,6 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
-llm = [
-    { name = "anthropic" },
-]
 sign = [
     { name = "pyasice" },
 ]
@@ -1536,9 +1535,11 @@ sign = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
+    { name = "anthropic", specifier = ">=0.40" },
     { name = "docxtpl", specifier = ">=0.19" },
     { name = "exifread", specifier = ">=3.0" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "pdfplumber", specifier = ">=0.11" },
     { name = "pillow", specifier = ">=10.4" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "python-docx", specifier = ">=1.1" },
@@ -1557,7 +1558,6 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.7" },
 ]
-llm = [{ name = "anthropic", specifier = ">=0.40" }]
 sign = [{ name = "pyasice", specifier = ">=1.1" }]
 
 [[package]]

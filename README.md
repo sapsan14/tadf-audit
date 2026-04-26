@@ -8,14 +8,26 @@ See `PLAN_FATHER_RU.docx` for the non-technical summary for Fjodor.
 
 ## Status
 
-Phase 1 (Local MVP) — **shipped**. Form + DOCX render + §5 legal checklist + SQLite persistence.
+- **Phase 1 (Local MVP)** — shipped. Form + DOCX render + §5 legal checklist + SQLite + photos.
+- **Phase 2 (LLM assist)** — shipped. Four helpers: narrative drafter, photo captioner, legal-ref ranker, Estonian polish.
 
 Coming next:
-- Phase 2: LLM drafters / photo captions / Estonian polish
 - Phase 3: ASiC-E signing via `pyasice` + Smart-ID/ID-card
 - Phase 4: PWA capture on the phone
 - Phase 5: Hetzner deployment
 - Phase 6: EHR submission via X-tee
+
+### Phase 2 — `ANTHROPIC_API_KEY` resolution
+
+The LLM features are off by default and turn on automatically when an API key is found, in this order:
+
+1. `ANTHROPIC_API_KEY` environment variable
+2. `~/.anthropic/key` file (Fjodor's preferred slot — same key shared with other Anthropic tools)
+3. `st.secrets["ANTHROPIC_API_KEY"]` (Streamlit Cloud)
+
+Models: Sonnet 4.6 for drafter + polish, Haiku 4.5 for captioner + ranker. Prompt caching enabled on every call.
+
+**Hard rules enforced in code:** sections 11 (Kokkuvõte) and 14 (Lõpphinnang) are auditor-only — drafter and polish refuse to touch them. The ranker only ever picks from `legal/references.yaml`; it cannot invent citations.
 
 ## Install (local laptop)
 

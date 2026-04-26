@@ -14,6 +14,8 @@ import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
 from tadf.config import AUDITS_DIR  # noqa: E402
+from tadf.llm import caption_photo  # noqa: E402
+from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.models import Photo  # noqa: E402
 from tadf.sections import SECTION_KEYS as ALL_SECTION_KEYS  # noqa: E402
 from tadf.sections import SECTION_LABELS as ALL_SECTION_LABELS  # noqa: E402
@@ -62,17 +64,59 @@ if uploaded:
         st.rerun()
 
 st.subheader(f"Загруженные фото ({len(audit.photos)})")
+
+llm_on = llm_available()
+if not llm_on:
+    st.caption(
+        "💡 ИИ-помощник для подписей сейчас выключен (нет ключа Anthropic). "
+        "Подписи и разделы можно проставить вручную."
+    )
+
 cols = st.columns(3)
 for i, p in enumerate(audit.photos):
     with cols[i % 3]:
         path = Path(p.path)
         if path.exists():
-            st.image(str(path), caption=f"[{p.section_ref}] {p.caption_auditor or ''}", width="stretch")
-        new_caption = st.text_input(f"Подпись #{i + 1}", value=p.caption_auditor or "", key=f"cap_{i}")
-        new_section = st.text_input(f"Раздел #{i + 1}", value=p.section_ref or "16", key=f"sec_{i}")
+            st.image(
+                str(path),
+                caption=f"[{p.section_ref}] {p.caption_auditor or ''}",
+                width="stretch",
+            )
+
+        new_caption = st.text_input(
+            f"Подпись #{i + 1}", value=p.caption_auditor or "", key=f"cap_{i}"
+        )
+        new_section = st.text_input(
+            f"Раздел #{i + 1}", value=p.section_ref or "16", key=f"sec_{i}"
+        )
         p.caption_auditor = new_caption
         p.section_ref = new_section
-        if st.button("Удалить", key=f"delphoto_{i}"):
-            audit.photos.pop(i)
-            set_current(audit)
-            st.rerun()
+
+        ai_col, del_col = st.columns(2)
+        with ai_col:
+            ai_clicked = st.button(
+                "🤖 ИИ-подпись",
+                key=f"ai_caption_{i}",
+                disabled=not llm_on,
+                help=(
+                    "Claude Haiku посмотрит фото и предложит эстонскую подпись + "
+                    "номер раздела. Текущие значения перезапишутся — можно редактировать."
+                ),
+            )
+            if ai_clicked and path.exists():
+                with st.spinner("ИИ смотрит фото…"):
+                    try:
+                        result = caption_photo(path, auditor_note=new_caption)
+                    except Exception as e:
+                        st.error(f"ИИ-ошибка: {e}")
+                        result = None
+                if result:
+                    p.caption_auditor = result["caption"]
+                    p.section_ref = result["section_ref"]
+                    set_current(audit)
+                    st.rerun()
+        with del_col:
+            if st.button("🗑️", key=f"delphoto_{i}"):
+                audit.photos.pop(i)
+                set_current(audit)
+                st.rerun()
