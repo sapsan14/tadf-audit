@@ -45,8 +45,14 @@ def _load_config() -> dict[str, Any]:
     )
 
 
-@st.cache_resource
 def _authenticator() -> stauth.Authenticate:
+    """Construct fresh on every call.
+
+    We can't @st.cache_resource this — the Authenticate constructor calls
+    `stx.CookieManager()` which is a Streamlit widget, and Streamlit forbids
+    widget calls inside cached functions. Reconstructing each rerun is
+    cheap (just Python objects + a cookie read).
+    """
     cfg = _load_config()
     return stauth.Authenticate(
         cfg["credentials"],
@@ -56,15 +62,22 @@ def _authenticator() -> stauth.Authenticate:
     )
 
 
+def _ensure_session_keys() -> None:
+    """streamlit-authenticator reads/writes specific keys; pre-init avoids
+    KeyError on first render."""
+    for k in ("authentication_status", "name", "username", "logout"):
+        st.session_state.setdefault(k, None)
+
+
 def require_login() -> stauth.Authenticate:
     """Block until the user is authenticated. Returns the authenticator
     so the caller can render a logout button.
 
-    MUST be called on every page right after `apply_consistent_layout()`.
+    MUST be called from `app/main.py` (the entry script) — pages no longer
+    call this themselves; the entry's call gates everything.
     """
+    _ensure_session_keys()
     auth = _authenticator()
-    # Renders the form widget and populates session_state. Wrapped in try
-    # because some misconfig raises before the user even sees the form.
     try:
         auth.login(
             location="main",
