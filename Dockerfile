@@ -46,6 +46,10 @@ RUN uv sync --frozen --no-dev
 # but checked into git so we don't need libreoffice at build time).
 COPY .streamlit ./.streamlit
 
+# Logo + favicon SVGs — referenced by app/_style.py (page_icon) and
+# app/TADF_Ehitus.py (home banner).
+COPY assets ./assets
+
 # Pre-create the writable runtime dir owned by app uid; bind-mount in
 # docker-compose puts a real Docker volume here so SQLite + photos persist.
 RUN mkdir -p /app/data && useradd --create-home --uid 1000 app && chown -R app:app /app
