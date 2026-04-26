@@ -31,9 +31,17 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 import streamlit as st  # noqa: E402
 
-from app._style import apply_consistent_layout, render_footer  # noqa: E402
+from app._style import (  # noqa: E402
+    apply_consistent_layout,
+    render_sidebar_footer,
+    render_sidebar_logo,
+)
 
 apply_consistent_layout("TADF Ehitus")
+
+# Logo at the top of the sidebar — visible on every page (including the
+# pre-auth login screen, since this runs before require_login).
+render_sidebar_logo()
 
 
 # ---------------------------------------------------------------------------
@@ -99,5 +107,7 @@ with st.sidebar:
 # Run the active page (declared above)
 nav.run()
 
-# Footer — version + copyright line, always at the bottom.
-render_footer()
+# Version + copyright pinned to the bottom of the sidebar (CSS-flex pushed
+# via margin-top: auto). Rendered after nav.run() so it lands as the last
+# child of the sidebar's user-content flex column.
+render_sidebar_footer()

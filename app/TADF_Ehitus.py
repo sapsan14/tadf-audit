@@ -1,27 +1,17 @@
 """Home page content. Loaded by app/main.py via st.navigation as the
-default page. Layout, auth, and sidebar are owned by main.py — this file
-only renders the welcome content.
+default page. Layout, auth, and sidebar (including logo + version) are
+owned by main.py + _style.py — this file only renders the welcome content.
 """
 
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import streamlit as st
 
 from app._state import all_saved_audits
-from tadf import __version__
-
-# Logo header
-_LOGO = Path(__file__).resolve().parent.parent / "assets" / "logo.svg"
-if _LOGO.exists():
-    cols = st.columns([1, 3, 1])
-    with cols[1]:
-        st.image(str(_LOGO), width=320)
 
 st.title("TADF — Помощник аудитора")
-st.caption(f"v{__version__}")
 st.markdown(
     """
 Добро пожаловать в инструмент для составления отчётов *ehitise auditi aruanne*.

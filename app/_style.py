@@ -49,21 +49,50 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
     max-width: {PAGE_MAX_WIDTH_PX}px;
     margin: 0 auto;
     padding-top: 2rem;
-    padding-bottom: 5rem;
+    padding-bottom: 3rem;
     padding-left: 2rem;
     padding-right: 2rem;
 }}
 
-/* Persistent footer at the very bottom of the main column. */
-.tadf-footer {{
-    margin-top: 4rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid rgba(128, 128, 128, 0.25);
-    color: rgba(128, 128, 128, 0.85);
-    font-size: 0.82rem;
-    text-align: center;
+/* Make the sidebar's user-content area a full-height flex column so the
+   version footer at the bottom can be pushed there with margin-top: auto.
+   Targets multiple Streamlit DOM versions (1.40+ uses stSidebarUserContent). */
+[data-testid="stSidebarUserContent"],
+[data-testid="stSidebar"] > div:first-child > div:nth-child(2) {{
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 4rem);
 }}
-.tadf-footer a {{
+
+/* Tighter sidebar padding so the logo + nav fit without scrolling. */
+[data-testid="stSidebarUserContent"] {{
+    padding-top: 1rem;
+}}
+
+/* Logo lives at the very top of the sidebar. */
+.tadf-sidebar-logo {{
+    text-align: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}}
+.tadf-sidebar-logo svg {{
+    width: 70%;
+    max-width: 180px;
+    height: auto;
+}}
+
+/* Version footer pinned to the bottom of the sidebar by margin-top: auto. */
+.tadf-sidebar-footer {{
+    margin-top: auto;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(128, 128, 128, 0.2);
+    font-size: 0.72rem;
+    color: rgba(128, 128, 128, 0.85);
+    text-align: center;
+    line-height: 1.4;
+}}
+.tadf-sidebar-footer a {{
     color: inherit;
     text-decoration: none;
     border-bottom: 1px dotted rgba(128, 128, 128, 0.5);
@@ -74,12 +103,28 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
     )
 
 
-def render_footer() -> None:
-    """Version + copyright line at the bottom of every page. Call last."""
-    st.markdown(
+def render_sidebar_logo() -> None:
+    """Logo at the top of the sidebar. Inlined as SVG so it inherits
+    currentColor (works in light + dark theme without extra files)."""
+    if not LOGO_PATH.exists():
+        return
+    svg = LOGO_PATH.read_text(encoding="utf-8")
+    # Strip the XML prolog so the SVG can be inlined inside HTML
+    if svg.startswith("<?xml"):
+        svg = svg.split("?>", 1)[1].lstrip()
+    st.sidebar.markdown(
+        f'<div class="tadf-sidebar-logo">{svg}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_sidebar_footer() -> None:
+    """Version + copyright pinned to the bottom of the sidebar."""
+    st.sidebar.markdown(
         f"""
-<div class="tadf-footer">
-    <strong>TADF Аудит</strong> v{__version__}  ·  {__copyright__}  ·
+<div class="tadf-sidebar-footer">
+    <strong>TADF Аудит</strong> v{__version__}<br>
+    {__copyright__}<br>
     <a href="https://github.com/sapsan14/tadf-audit" target="_blank">GitHub</a>
 </div>
 """,
