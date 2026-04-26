@@ -41,30 +41,31 @@ def rank_legal_refs(observation: str, *, audit_type: str, section_ref: str) -> l
         f"Märkus:\n{observation.strip()}\n\nKandidaadid:\n{candidate_lines}\n\n"
         "Vasta JSON-objektiga, kus on väli 'codes' — ranked array of codes."
     )
+    # NOTE: Anthropic's output_config JSON-schema rejects minItems/maxItems on
+    # arrays. We enforce the 3-item cap in Python below instead.
     schema = {
         "type": "object",
         "properties": {
             "codes": {
                 "type": "array",
-                "minItems": 0,
-                "maxItems": 3,
                 "items": {"type": "string", "enum": candidate_codes},
             },
         },
         "required": ["codes"],
         "additionalProperties": False,
     }
+    user = user + "\nReturn at most 3 codes, ranked from most to least relevant."
 
-    try:
-        data = complete_json(
-            model=MODEL_RANKER,
-            system=system,
-            user=user,
-            schema=schema,
-            max_tokens=300,
-        )
-    except Exception:
-        return []
+    # Let API exceptions propagate — the caller (Наблюдения page) surfaces
+    # errors via _record_error so the user sees what went wrong instead of
+    # an empty result.
+    data = complete_json(
+        model=MODEL_RANKER,
+        system=system,
+        user=user,
+        schema=schema,
+        max_tokens=300,
+    )
     raw = data.get("codes", [])
-    # Defensive — ensure model didn't hallucinate
+    # Defensive — ensure model didn't hallucinate; cap at 3
     return [c for c in raw if c in candidate_codes][:3]
