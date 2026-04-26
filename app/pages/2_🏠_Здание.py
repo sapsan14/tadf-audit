@@ -10,8 +10,6 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
-from app._widgets import combobox  # noqa: E402
-from tadf.db.lookups import building_addresses, building_use_purposes  # noqa: E402
 
 st.title("Здание (auditi objekt)")
 
@@ -27,17 +25,15 @@ def k(name: str) -> str:
     return f"b_{scope}_{name}"
 
 
-b.address = combobox(
+b.address = st.text_input(
     "Адрес объекта (Aadress)",
-    suggestions=building_addresses(),
     value=b.address,
     key=k("address"),
     help=(
         "Полный почтовый адрес здания в формате «улица номер, населённый пункт, "
-        "уезд». Например: «Auga tn 8, Narva-Jõesuu linn, Ida-Viru maakond». "
-        "При вводе появятся варианты из ранее обследованных объектов."
+        "уезд». Например: «Auga tn 8, Narva-Jõesuu linn, Ida-Viru maakond»."
     ),
-) or ""
+)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -69,20 +65,16 @@ with col2:
         or None
     )
 
-b.use_purpose = combobox(
+b.use_purpose = st.text_input(
     "Kasutusotstarve (назначение)",
-    suggestions=building_use_purposes() or [
-        "aiamaja", "üksikelamu", "korterelamu", "ärihoone",
-        "tööstushoone", "majandushoone", "garaaž",
-    ],
-    value=b.use_purpose,
+    value=b.use_purpose or "",
     key=k("use_purpose"),
     help=(
         "Назначение здания по EHR-классификации. Стандартные значения: "
         "aiamaja, üksikelamu, korterelamu, ärihoone, tööstushoone, "
         "majandushoone. Полный список — на ehr.ee."
     ),
-)
+) or None
 
 col1, col2, col3 = st.columns(3)
 with col1:

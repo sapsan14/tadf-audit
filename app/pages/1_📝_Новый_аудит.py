@@ -12,8 +12,6 @@ from datetime import date  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app._state import all_saved_audits, get_current, reload_from_db, set_current  # noqa: E402
-from app._widgets import combobox  # noqa: E402
-from tadf.db.lookups import client_names, composer_companies, composer_names  # noqa: E402
 from tadf.models import Auditor  # noqa: E402
 
 st.title("Новый аудит / открыть существующий")
@@ -141,20 +139,18 @@ with col1:
     st.subheader("Auditi koostas")
     st.caption("Инженер, который физически готовит отчёт. Может совпадать с проверяющим.")
     audit.composer = Auditor(
-        full_name=combobox(
+        full_name=st.text_input(
             "Имя",
-            suggestions=composer_names(),
             value=audit.composer.full_name,
             key=k("composer_name"),
-            help="ФИО составителя. Появятся варианты из ранее сохранённых аудитов.",
-        ) or "",
-        company=combobox(
+            help="ФИО составителя.",
+        ),
+        company=st.text_input(
             "Компания",
-            suggestions=composer_companies(),
-            value=audit.composer.company,
+            value=audit.composer.company or "",
             key=k("composer_company"),
             help="Юр. лицо составителя (например TADF Ehitus OÜ или UNTWERP OÜ).",
-        ),
+        ) or None,
         company_reg_nr=st.text_input(
             "Reg. nr",
             value=audit.composer.company_reg_nr or "",
@@ -175,13 +171,12 @@ with col2:
         "за отчёт и подписывает его. По умолчанию — Фёдор."
     )
     audit.reviewer = Auditor(
-        full_name=combobox(
+        full_name=st.text_input(
             "Имя",
-            suggestions=composer_names(),
             value=audit.reviewer.full_name,
             key=k("reviewer_name"),
             help="ФИО ответственного лица (vastutav pädev isik).",
-        ) or "",
+        ),
         kutsetunnistus_no=st.text_input(
             "Kutsetunnistus №",
             value=audit.reviewer.kutsetunnistus_no or "",
@@ -196,12 +191,11 @@ with col2:
             value=audit.reviewer.qualification or "Diplomeeritud insener tase 7",
             key=k("reviewer_qual"),
         ) or None,
-        company=combobox(
+        company=st.text_input(
             "Компания",
-            suggestions=composer_companies(),
             value=audit.reviewer.company or "TADF Ehitus OÜ",
             key=k("reviewer_company"),
-        ),
+        ) or None,
     )
 
 st.header("Заказчик (Tellija)")
@@ -210,13 +204,12 @@ if audit.client is None:
     from tadf.models import Client
 
     audit.client = Client(name="")
-audit.client.name = combobox(
+audit.client.name = st.text_input(
     "Название / имя",
-    suggestions=client_names(),
     value=audit.client.name,
     key=k("client_name"),
     help="Название организации или ФИО физ. лица.",
-) or ""
+)
 col1, col2, col3 = st.columns(3)
 with col1:
     audit.client.reg_code = st.text_input(

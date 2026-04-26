@@ -42,16 +42,18 @@ def render_to_path(
     if template_path is None:
         template_path = template_for(audit.subtype)
 
-    ctx = build_context(audit)
-
-    # Persist the exact context for reproducibility / 7-year retention.
+    # Persist a JSON-friendly context (no InlineImage objects) for retention.
+    json_ctx = build_context(audit, tpl=None)
     (out_dir / "context.json").write_text(
-        json.dumps(ctx, ensure_ascii=False, indent=2, default=str),
+        json.dumps(json_ctx, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
 
+    # Now build a render-time context bound to the actual template (so photos
+    # become InlineImage instances) and render.
     tpl = DocxTemplate(str(template_path))
-    tpl.render(ctx)
+    render_ctx = build_context(audit, tpl=tpl)
+    tpl.render(render_ctx)
     out_path = out_dir / "draft.docx"
     tpl.save(str(out_path))
     return out_path

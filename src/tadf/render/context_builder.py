@@ -7,9 +7,12 @@ retention.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import yaml
+from docx.shared import Mm
+from docxtpl import DocxTemplate, InlineImage
 
 from tadf.legal.loader import for_section
 from tadf.models import Audit
@@ -49,8 +52,39 @@ def _audit_type_text(audit: Audit) -> str:
     )
 
 
-def build_context(audit: Audit) -> dict[str, Any]:
-    """Return the dict consumed by docxtpl.render(context)."""
+def _photo_block(audit: Audit, tpl: DocxTemplate | None) -> list[dict[str, Any]]:
+    """Build the photo list, with embedded images if a template is provided.
+
+    `tpl=None` is supported for headless context generation (e.g. JSON dump for
+    retention) where the actual InlineImage object can't be serialised.
+    """
+    out = []
+    for p in audit.photos:
+        if not p.accepted:
+            continue
+        path = Path(p.path)
+        if not path.exists():
+            continue
+        entry: dict[str, Any] = {
+            "path": str(path),
+            "caption": p.caption_auditor or "",
+            "section_ref": p.section_ref or "16",
+        }
+        if tpl is not None:
+            entry["image"] = InlineImage(tpl, str(path), width=Mm(140))
+        out.append(entry)
+    # Sort by section_ref so all 8.x photos cluster together, etc.
+    out.sort(key=lambda x: x["section_ref"])
+    return out
+
+
+def build_context(audit: Audit, tpl: DocxTemplate | None = None) -> dict[str, Any]:
+    """Return the dict consumed by docxtpl.render(context).
+
+    Pass `tpl` to enable inline-image embedding for photos. Without it the
+    `photos` list is still populated (with paths + captions) but no images
+    are embedded — useful for the persisted context.json snapshot.
+    """
     bp = yaml.safe_load(BOILERPLATE_PATH.read_text(encoding="utf-8"))
     methodology = bp["methodology"][audit.methodology_version]
     purpose_default = bp["audit_purpose"].get(audit.subtype, "")
@@ -87,5 +121,7 @@ def build_context(audit: Audit) -> dict[str, Any]:
     # Per-section finding lists used by the template's {% for %} loops
     for n in ("4", "5", "6", "7", "8", "11", "14"):
         ctx[f"findings_section_{n}"] = _findings_for(audit, n)
+
+    ctx["photos"] = _photo_block(audit, tpl)
 
     return ctx

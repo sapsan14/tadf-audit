@@ -157,6 +157,13 @@ def build(subtype: str = "kasutuseelne") -> Path:
     _p(doc, "{{ f.observation }}")
     doc.add_paragraph("{% endfor %}")
 
+    # ---------- 16. FOTOD ----------
+    _h(doc, "16. FOTOD")
+    doc.add_paragraph("{% for photo in photos %}")
+    _p(doc, "[{{ photo.section_ref }}]  {{ photo.caption }}")
+    doc.add_paragraph("{{ photo.image }}")
+    doc.add_paragraph("{% endfor %}")
+
     # ---------- 15. ALLKIRJAD ----------
     _h(doc, "15. ALLKIRJAD")
     _p(doc, "Auditi koostas:")

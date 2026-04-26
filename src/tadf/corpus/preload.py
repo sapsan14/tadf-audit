@@ -187,8 +187,25 @@ def preload_demo() -> int:
     return inserted
 
 
-def preload_corpus(audit_dir: Path) -> tuple[int, int]:
-    """Import all parseable reports from `audit_dir` into the database.
+def _file_sort_key(path: Path) -> tuple[int, float]:
+    """Sort key for picking the 'latest' report. Prefers the trailing ISO date
+    in the filename; falls back to the file's modification time."""
+    stem = path.stem
+    if m := re.search(r"(\d{4})-(\d{2})-(\d{2})\D*$", stem):
+        y, mo, d = (int(g) for g in m.groups())
+        return (y * 10000 + mo * 100 + d, path.stat().st_mtime)
+    if m := re.search(r"_(\d{2})(\d{2})(\d{4})\D*$", stem):
+        d, mo, y = (int(g) for g in m.groups())
+        return (y * 10000 + mo * 100 + d, path.stat().st_mtime)
+    return (0, path.stat().st_mtime)
+
+
+def preload_corpus(audit_dir: Path, limit: int = 1) -> tuple[int, int]:
+    """Import the `limit` most-recent parseable reports from `audit_dir`.
+
+    Default `limit=1` because earlier batch imports produced messy text-dump
+    findings — only the freshest, cleanest .docx is loaded as a reference.
+    Pass `limit=0` to import all (no cap).
 
     Returns (imported, skipped). Idempotent: rows with matching (seq_no, year,
     address) are not duplicated.
@@ -196,22 +213,30 @@ def preload_corpus(audit_dir: Path) -> tuple[int, int]:
     if not audit_dir.exists():
         return 0, 0
 
-    imported = skipped = 0
+    candidates = [
+        p for p in audit_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in PARSERS
+    ]
+    # Newest first, optionally capped
+    candidates.sort(key=_file_sort_key, reverse=True)
+    if limit > 0:
+        candidates = candidates[:limit]
+
+    skipped = sum(
+        1 for p in audit_dir.iterdir()
+        if p.is_file() and p.suffix.lower() not in PARSERS
+    )
+
     with session_scope() as s:
-        # Precompute existing keys to avoid duplicate imports on reruns
         existing = {
-            (row.seq_no, row.year, (row.building.address or "")[:60]) for row in s.query(AuditRow).all()
+            (row.seq_no, row.year, (row.building.address or "")[:60])
+            for row in s.query(AuditRow).all()
         }
 
-    for path in sorted(audit_dir.iterdir()):
-        if not path.is_file():
-            continue
-        parser = PARSERS.get(path.suffix.lower())
-        if parser is None:
-            skipped += 1
-            continue
+    imported = 0
+    for path in candidates:
         try:
-            report = parser(path)
+            report = PARSERS[path.suffix.lower()](path)
             audit = _report_to_audit(path, report)
         except Exception as e:
             print(f"  preload skip {path.name}: {e}")
