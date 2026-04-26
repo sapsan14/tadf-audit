@@ -43,7 +43,7 @@ uv sync --group corpus     # + pdfplumber, pytesseract (for legacy ingestion)
 ## Run
 
 ```bash
-uv run streamlit run app/TADF_Ehitus.py
+uv run streamlit run app/main.py
 ```
 
 Then open the URL Streamlit prints (default <http://localhost:8501>).
