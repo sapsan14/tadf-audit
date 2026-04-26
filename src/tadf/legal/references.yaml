@@ -16,7 +16,7 @@
 - code: "EhS § 11"
   title_et: "Ehitusseadustik § 11 — Ehitisele ja ehitamisele esitatavad nõuded"
   url: "https://www.riigiteataja.ee/akt/105032015001"
-  section_keys: ["1", "2", "5", "6", "7", "8", "10", "11", "12", "14"]
+  section_keys: ["1", "2", "4", "5", "6", "7", "8", "10", "11", "12", "14"]
 
 - code: "EhS § 12"
   title_et: "Ehitusseadustik § 12 — Ehitise kasutamine"
@@ -26,7 +26,7 @@
 - code: "EhS § 18"
   title_et: "Ehitusseadustik § 18 — Ehitise audit"
   url: "https://www.riigiteataja.ee/akt/105032015001"
-  section_keys: ["1", "2", "11", "12", "13", "14"]
+  section_keys: ["1", "2", "4", "11", "12", "13", "14"]
 
 - code: "EhS § 24"
   title_et: "Ehitusseadustik § 24 — Ehitise dokumendid"
@@ -62,12 +62,12 @@
 - code: "MTR määrus nr 116"
   title_et: "MTR määrus nr 116 (24.09.2015) „Ehitise auditi tegemise kord“"
   url: "https://www.riigiteataja.ee/akt/120102020004"
-  section_keys: ["1", "11", "12", "13", "14"]
+  section_keys: ["1", "4", "11", "12", "13", "14"]
 
 - code: "MTR määrus nr 116 § 5"
   title_et: "MTR määrus nr 116 § 5 — Auditi aruande sisu nõuded"
   url: "https://www.riigiteataja.ee/akt/120102020004"
-  section_keys: ["1", "11", "12", "13", "14"]
+  section_keys: ["1", "4", "11", "12", "13", "14"]
 
 - code: "MTR määrus nr 17"
   title_et: "MTR määrus nr 17 (07.04.2017) „Ehitisele esitatavad tuleohutusnõuded ja nõuded tuletõrje veevarustusele“"

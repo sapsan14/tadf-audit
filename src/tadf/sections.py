@@ -9,9 +9,26 @@ Derived from:
 
 Findings get attached to a `section_ref` (e.g. "6.4", "8.8"). The §5 checklist
 walks the canonical numbers (11, 14) to enforce auditor-only sections.
+
+Two views of the same table:
+  - SECTIONS         — pickable in the Наблюдения form (4–10, 11, 13, 14, 16)
+  - ALL_SECTIONS     — complete map including auto-populated sections
+                       (1 Üldosa, 2 Objekt, 3 Kinnistu, 12 Õiguslikud alused,
+                       15 Allkirjad). Used for legal-ref display labels.
 """
 
 from __future__ import annotations
+
+# Auto-populated sections — boilerplate/template-driven, not user-pickable.
+# Listed here so legal references that target them (in references.yaml) get
+# proper human labels in the Правовая база browse page.
+_AUTO_SECTIONS: list[tuple[str, str]] = [
+    ("1", "1. ÜLDOSA"),
+    ("2", "2. AUDITI OBJEKT JA SELLE KIRJELDUS"),
+    ("3", "3. KINNISTU ASUKOHT JA PLANEERING"),
+    ("12", "12. AUDITI ÕIGUSLIKUD ALUSED JA ULATUS"),
+    ("15", "15. ALLKIRJAD"),
+]
 
 # (key, label) — key is what gets stored in Finding.section_ref
 SECTIONS: list[tuple[str, str]] = [
@@ -94,7 +111,10 @@ SECTIONS: list[tuple[str, str]] = [
 ]
 
 SECTION_KEYS = [k for k, _ in SECTIONS]
-SECTION_LABELS = dict(SECTIONS)
+# SECTION_LABELS includes auto-populated sections (1, 2, 3, 12, 15) so legal
+# references targeting those sections render with proper human labels in the
+# Правовая база page.
+SECTION_LABELS = dict(SECTIONS) | dict(_AUTO_SECTIONS)
 
 # Top-level numbers used by render context (one finding-list slot per number)
 TOP_LEVEL_NUMBERS = ["4", "5", "6", "7", "8", "10", "11", "13", "14", "16"]

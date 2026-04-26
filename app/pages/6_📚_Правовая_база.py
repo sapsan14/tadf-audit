@@ -77,17 +77,19 @@ for category, items in by_cat.items():
                     st.markdown(f"[🔗 riigiteataja.ee]({r.url})")
             with cols[2]:
                 if r.section_keys:
-                    sec_labels = ", ".join(
-                        f"{k} {SECTION_LABELS.get(k, '').split('.', 1)[-1].strip()[:30]}"
-                        if k in SECTION_LABELS
-                        else k
-                        for k in r.section_keys
-                    )
-                    st.caption(f"Применимо к: {sec_labels}")
+                    # Strip the "только аудитор, без ИИ" suffix that some
+                    # SECTION_LABELS carry, and show the section heading
+                    # whole rather than character-truncated mid-word.
+                    def _short(k: str) -> str:
+                        full = SECTION_LABELS.get(k, k)
+                        return full.split(" — ", 1)[0]
+
+                    sec_labels = ", ".join(_short(k) for k in r.section_keys)
+                    st.caption(f"**Применимо к:** {sec_labels}")
                 else:
-                    st.caption("Применимо везде")
+                    st.caption("**Применимо везде**")
                 if r.audit_types:
-                    st.caption(f"Типы аудита: {', '.join(r.audit_types)}")
+                    st.caption(f"**Типы аудита:** {', '.join(r.audit_types)}")
 
 if search and total_shown == 0:
     st.info("Ничего не найдено. Попробуйте другой запрос.")

@@ -69,7 +69,23 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
     padding-top: 1rem;
 }}
 
-/* st.logo() handles its own placement at the top of the sidebar. */
+/* st.logo() places an <img> in stSidebarHeader. By default Streamlit
+   caps it well under the sidebar width — stretch it to match the menu
+   text width so the brand reads clearly. */
+[data-testid="stSidebarHeader"] {{
+    padding: 0.75rem 0.5rem 0.5rem 0.5rem !important;
+}}
+[data-testid="stSidebarHeader"] a,
+[data-testid="stSidebarHeader"] > div,
+[data-testid="stLogo"] {{
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+}}
+[data-testid="stLogo"] {{
+    display: block !important;
+    object-fit: contain !important;
+}}
 
 /* Version footer pinned to the bottom of the sidebar by margin-top: auto. */
 .tadf-sidebar-footer {{
