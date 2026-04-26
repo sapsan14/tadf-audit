@@ -21,7 +21,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 import streamlit as st  # noqa: E402
 
 from tadf.config import ROOT  # noqa: E402
-from tadf.corpus.preload import preload_corpus  # noqa: E402
+from tadf.corpus.preload import preload_corpus, preload_demo  # noqa: E402
 from tadf.db.session import init_db  # noqa: E402
 
 st.set_page_config(
@@ -35,20 +35,22 @@ init_db()
 
 
 @st.cache_resource
-def _preload_corpus_once() -> tuple[int, int]:
-    """Idempotent preload of historical reports under /audit/.
+def _seed_db_once() -> tuple[int, int, int]:
+    """Idempotent DB seeding. Returns (corpus_imports, corpus_skips, demo_inserts).
 
-    Cached at process scope so it runs once per Streamlit worker. Skips entirely
-    on Streamlit Cloud (no /audit/ folder there) — only runs on local installs
-    where Fjodor has the original audit folder.
+    On a local install with /audit/ present: preloads parsed historical reports.
+    On Streamlit Cloud (no /audit/): inserts hand-crafted demo audits instead.
+    Always cached at process scope so it runs once per worker.
     """
     audit_dir = ROOT / "audit"
-    if not audit_dir.exists():
-        return (0, 0)
-    return preload_corpus(audit_dir)
+    if audit_dir.exists():
+        imp, skp = preload_corpus(audit_dir)
+        return (imp, skp, 0)
+    demo_count = preload_demo()
+    return (0, 0, demo_count)
 
 
-_imported, _skipped = _preload_corpus_once()
+_imported, _skipped, _demo_inserted = _seed_db_once()
 
 st.title("TADF — Помощник аудитора")
 st.markdown(
@@ -77,6 +79,12 @@ if _imported:
     st.success(
         f"📥 Предзагружено {_imported} исторических отчётов из папки `audit/` "
         f"в базу. Откройте «Новый аудит» → «Открыть сохранённый аудит» для просмотра."
+    )
+elif _demo_inserted:
+    st.success(
+        f"🎁 В базу добавлено {_demo_inserted} демо-аудита для ознакомления. "
+        f"Откройте «Новый аудит» → «Открыть сохранённый аудит» и попробуйте "
+        f"загрузить любой из них."
     )
 
 # Cloud-environment warning. Streamlit Community Cloud sets HOSTNAME to

@@ -167,6 +167,26 @@ def _report_to_audit(path: Path, report: ParsedReport) -> Audit:
     )
 
 
+def preload_demo() -> int:
+    """Insert hand-crafted demo audits if the DB has no audits.
+
+    Used as the cloud-friendly seed (the /audit/ folder is gitignored, so on
+    Streamlit Cloud `preload_corpus` finds nothing). Returns the number inserted.
+    """
+    from tadf.demo import all_demos
+
+    inserted = 0
+    with session_scope() as s:
+        already = s.query(AuditRow).count()
+    if already > 0:
+        return 0
+    for demo in all_demos():
+        with session_scope() as s:
+            save_audit(s, demo)
+        inserted += 1
+    return inserted
+
+
 def preload_corpus(audit_dir: Path) -> tuple[int, int]:
     """Import all parseable reports from `audit_dir` into the database.
 

@@ -10,6 +10,8 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
+from app._widgets import combobox  # noqa: E402
+from tadf.db.lookups import building_addresses, building_use_purposes  # noqa: E402
 
 st.title("Здание (auditi objekt)")
 
@@ -25,7 +27,17 @@ def k(name: str) -> str:
     return f"b_{scope}_{name}"
 
 
-b.address = st.text_input("Адрес объекта (Aadress)", value=b.address, key=k("address"))
+b.address = combobox(
+    "Адрес объекта (Aadress)",
+    suggestions=building_addresses(),
+    value=b.address,
+    key=k("address"),
+    help=(
+        "Полный почтовый адрес здания в формате «улица номер, населённый пункт, "
+        "уезд». Например: «Auga tn 8, Narva-Jõesuu linn, Ida-Viru maakond». "
+        "При вводе появятся варианты из ранее обследованных объектов."
+    ),
+) or ""
 
 col1, col2 = st.columns(2)
 with col1:
@@ -33,7 +45,11 @@ with col1:
         st.text_input(
             "Katastritunnus",
             value=b.kataster_no or "",
-            help="Например: 85101:004:0020",
+            help=(
+                "Кадастровый номер кинниста в формате «XXXXX:XXX:XXXX» "
+                "(например 85101:004:0020). Можно посмотреть на geoportaal.maaamet.ee. "
+                "По §5 — обязательно либо это, либо EHR-код."
+            ),
             key=k("kataster_no"),
         )
         or None
@@ -43,20 +59,29 @@ with col2:
         st.text_input(
             "Ehitisregistri kood (EHR)",
             value=b.ehr_code or "",
-            help="7–12 цифр",
+            help=(
+                "Код здания в Ehitisregister (7–12 цифр). Найти можно на "
+                "ehr.ee по адресу. Если здание не зарегистрировано — оставьте "
+                "пусто, тогда обязателен kataster_no."
+            ),
             key=k("ehr_code"),
         )
         or None
     )
 
-b.use_purpose = (
-    st.text_input(
-        "Kasutusotstarve (назначение)",
-        value=b.use_purpose or "",
-        help="Например: aiamaja, korterelamu, ärihoone",
-        key=k("use_purpose"),
-    )
-    or None
+b.use_purpose = combobox(
+    "Kasutusotstarve (назначение)",
+    suggestions=building_use_purposes() or [
+        "aiamaja", "üksikelamu", "korterelamu", "ärihoone",
+        "tööstushoone", "majandushoone", "garaaž",
+    ],
+    value=b.use_purpose,
+    key=k("use_purpose"),
+    help=(
+        "Назначение здания по EHR-классификации. Стандартные значения: "
+        "aiamaja, üksikelamu, korterelamu, ärihoone, tööstushoone, "
+        "majandushoone. Полный список — на ehr.ee."
+    ),
 )
 
 col1, col2, col3 = st.columns(3)
@@ -68,6 +93,12 @@ with col1:
         value=b.construction_year or 2000,
         step=1,
         key=k("construction_year"),
+        help=(
+            "Год сдачи здания в эксплуатацию. Если оригинальные документы "
+            "утеряны и год точно неизвестен — поставьте приближённую оценку "
+            "и обязательно отметьте «Pre-2003 ehitis» + заполните пояснение "
+            "в substitute_docs_note ниже."
+        ),
     )
 with col2:
     _last = st.number_input(
@@ -77,17 +108,31 @@ with col2:
         value=b.last_renovation_year or 0,
         step=1,
         key=k("last_renovation_year"),
+        help=(
+            "Год последней значительной реконструкции (если была). 0 означает "
+            "«реконструкции не было». Влияет на то, какие нормы применимы — "
+            "после реконструкции применяются новые требования."
+        ),
     )
     b.last_renovation_year = _last if _last > 0 else None
 with col3:
     b.pre_2003 = st.checkbox(
         "Pre-2003 ehitis",
         value=b.pre_2003,
-        help="EhSRS § 28 — аудит заменяет недостающую документацию",
+        help=(
+            "Здание построено ДО 2003 года, когда вступил в силу Ehitusseadustik. "
+            "По EhSRS § 28 — для таких зданий аудит ЗАМЕНЯЕТ отсутствующую "
+            "ehitusprojekti документацию. Если включено, обязательно заполните "
+            "поле substitute_docs_note внизу страницы."
+        ),
         key=k("pre_2003"),
     )
 
 st.subheader("Технические показатели (для §10 отчёта)")
+st.caption(
+    "Все значения по правилам RT 110062015008 «Ehitise tehniliste andmete "
+    "loetelu». Замеры — по фактическим обмерам или по проектной документации."
+)
 col1, col2, col3 = st.columns(3)
 with col1:
     _fp = st.number_input(
@@ -97,6 +142,11 @@ with col1:
         step=0.5,
         format="%.1f",
         key=k("footprint_m2"),
+        help=(
+            "Площадь застройки — площадь горизонтальной проекции здания на "
+            "землю, по внешнему контуру стен. По §5 + RT 110062015008 — "
+            "обязательное поле."
+        ),
     )
     b.footprint_m2 = _fp if _fp > 0 else None
 with col2:
@@ -107,6 +157,7 @@ with col2:
         step=0.1,
         format="%.1f",
         key=k("height_m"),
+        help="Высота здания от уровня земли до верхней точки крыши (по карнизу).",
     )
     b.height_m = _h if _h > 0 else None
 with col3:
@@ -117,6 +168,10 @@ with col3:
         step=1.0,
         format="%.1f",
         key=k("volume_m3"),
+        help=(
+            "Строительный объём здания — объём по внешним размерам, "
+            "включая чердак и подвал. По RT 110062015008."
+        ),
     )
     b.volume_m3 = _vol if _vol > 0 else None
 
@@ -129,6 +184,7 @@ with col1:
         value=b.storeys_above or 0,
         step=1,
         key=k("storeys_above"),
+        help="Maapealsete korruste arv — этажи, центр пола которых выше уровня земли.",
     )
     b.storeys_above = _sa if _sa > 0 else None
 with col2:
@@ -139,6 +195,7 @@ with col2:
         value=b.storeys_below or 0,
         step=1,
         key=k("storeys_below"),
+        help="Maa-aluste korruste arv — подвальные этажи (0 = подвала нет).",
     )
     b.storeys_below = _sb  # 0 is a valid answer for "no basement"
 with col3:
@@ -149,6 +206,10 @@ with col3:
         step=10.0,
         format="%.1f",
         key=k("site_area_m2"),
+        help=(
+            "Площадь земельного участка (кинниста), на котором стоит здание. "
+            "Берётся из кадастровых данных (geoportaal.maaamet.ee)."
+        ),
     )
     b.site_area_m2 = _site if _site > 0 else None
 
@@ -160,25 +221,52 @@ b.fire_class = st.selectbox(
     index=_fc_options.index(b.fire_class) if b.fire_class in _fc_options else 0,
     format_func=lambda x: "(не указано)" if x is None else x,
     key=k("fire_class"),
+    help=(
+        "Класс огнестойкости здания по EVS 812-7 / Tuleohutuse seadus:\n"
+        "• TP-1 — высокий (R 60+, для зданий выше 3 этажей или массового "
+        "пребывания людей)\n"
+        "• TP-2 — средний (R 30, для большинства многоквартирных)\n"
+        "• TP-3 — низкий (R 15, для üksikelamu, aiamaja, garaaž)\n\n"
+        "Если класс указан, в разделе 8 отчёта обязательно должна быть хотя "
+        "бы одна находка по пожарной безопасности — иначе не пройдёт §5 "
+        "проверку."
+    ),
 )
 
 st.subheader("Проектировщик / строитель")
+st.caption("Если данные неизвестны (особенно для pre-2003 зданий) — оставьте пустым.")
 col1, col2 = st.columns(2)
 with col1:
-    b.designer = st.text_input("Designer (projekteerija)", value=b.designer or "", key=k("designer")) or None
+    b.designer = st.text_input(
+        "Designer (projekteerija)",
+        value=b.designer or "",
+        key=k("designer"),
+        help=(
+            "Кто проектировал здание (физ. лицо или фирма). "
+            "Берётся из ehitusprojekti документации, если есть."
+        ),
+    ) or None
 with col2:
-    b.builder = st.text_input("Builder (ehitaja)", value=b.builder or "", key=k("builder")) or None
+    b.builder = st.text_input(
+        "Builder (ehitaja)",
+        value=b.builder or "",
+        key=k("builder"),
+        help="Кто строил здание (генподрядчик).",
+    ) or None
 
 if b.pre_2003:
-    b.substitute_docs_note = (
-        st.text_area(
-            "Substitute-docs note (EhSRS § 28)",
-            value=b.substitute_docs_note or "",
-            help="Заметка о том, какую документацию заменяет данный аудит",
-            key=k("substitute_docs_note"),
-        )
-        or None
-    )
+    b.substitute_docs_note = st.text_area(
+        "Substitute-docs note (EhSRS § 28)",
+        value=b.substitute_docs_note or "",
+        help=(
+            "По EhSRS § 28 — для зданий, построенных до 2003 г., аудит "
+            "ЗАМЕНЯЕТ отсутствующую ehitusprojekti документацию. Опишите, "
+            "какие документы отсутствуют (например «оригинальный проект "
+            "утерян»; «нет акта сдачи-приёмки») и каким образом этот аудит "
+            "их заменяет — это нужно для регистрации в Ehitisregister."
+        ),
+        key=k("substitute_docs_note"),
+    ) or None
 
 audit.building = b
 set_current(audit)

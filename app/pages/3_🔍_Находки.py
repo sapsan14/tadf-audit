@@ -40,19 +40,55 @@ def _legal_refs_for(section_ref: str) -> list:
 # ---------------------------------------------------------------------------
 # Add new finding
 # ---------------------------------------------------------------------------
+SEVERITY_HELP = (
+    "📝 Инфо — нейтральное наблюдение, нет нарушений\n"
+    "⚠️ Мелкое несоответствие — отклонение от нормы, не угрожает безопасности\n"
+    "❗ Существенное несоответствие — нарушение требований Ehitusseadustik / EVS, "
+    "требуется устранение\n"
+    "🛑 Опасность — непосредственная угроза жизни/здоровью, требуется немедленное "
+    "действие (упоминается в Lõpphinnang)"
+)
+
 st.subheader("Добавить находку")
 with st.form(f"new_finding_{scope}", clear_on_submit=True):
     col1, col2 = st.columns([1, 3])
     with col1:
-        new_section = st.selectbox("Раздел", options=SECTION_KEYS, format_func=lambda x: SECTION_LABELS[x])
+        new_section = st.selectbox(
+            "Раздел",
+            options=SECTION_KEYS,
+            format_func=lambda x: SECTION_LABELS[x],
+            help=(
+                "Раздел отчёта, к которому относится находка. Подразделы (6.1, "
+                "8.8 и т.д.) добавлены из EVS 812-7 / EVS 932 + ваших старых "
+                "отчётов. **Разделы 11 и 14 — только аудитор, без ИИ-помощи.**"
+            ),
+        )
         new_severity = st.selectbox(
             "Серьёзность",
             options=SEVERITY_OPTIONS,
             format_func=lambda s: SEVERITY_LABELS[s],
+            help=SEVERITY_HELP,
         )
     with col2:
-        new_observation = st.text_area("Наблюдение (тезисами или прозой; на эстонском)", height=100)
-        new_recommendation = st.text_area("Рекомендация (опционально)", height=60)
+        new_observation = st.text_area(
+            "Наблюдение (тезисами или прозой; на эстонском)",
+            height=100,
+            help=(
+                "Что вы увидели на объекте. На эстонском, потому что отчёт "
+                "идёт в Ehitisregister на эстонском. Можно тезисами — на "
+                "фазе 2 ИИ поможет развернуть в формальную прозу с вашим "
+                "одобрением каждой строки."
+            ),
+        )
+        new_recommendation = st.text_area(
+            "Рекомендация (опционально)",
+            height=60,
+            help=(
+                "Что владельцу следует сделать. Например «Заменить катусекатте "
+                "в течение 6 месяцев». Помогает заказчику и попадает в "
+                "Lõpphinnang."
+            ),
+        )
 
     suggestions = _legal_refs_for(new_section)
     new_legal_codes: list[str] = []
@@ -61,6 +97,12 @@ with st.form(f"new_finding_{scope}", clear_on_submit=True):
             "Ссылки на закон (предложения для этого раздела)",
             options=[r.code for r in suggestions],
             format_func=lambda c: f"{c} — {next(r.title_et for r in suggestions if r.code == c)[:60]}",
+            help=(
+                "Какие нормы нарушены или подтверждены этой находкой. "
+                "Список — из курируемой таблицы legal/references.yaml. "
+                "На фазе 2 ИИ предложит ранжированные варианты, но никогда "
+                "не придумает новые ссылки."
+            ),
         )
 
     if st.form_submit_button("➕ Добавить находку", type="primary") and new_observation.strip():
@@ -94,7 +136,11 @@ if "_pending_delete" not in st.session_state:
 
 for i, f in enumerate(audit.findings):
     severity_icon = SEVERITY_LABELS[f.severity].split(" ", 1)[0]
-    title = f"{i + 1}. {severity_icon} [{f.section_ref}] {f.observation_raw[:70]}"
+    # Collapse newlines and whitespace so the expander header is always a single
+    # readable line, not the start of a wrapped paragraph.
+    preview = " ".join(f.observation_raw.split())[:80] or "(пусто)"
+    section_label = SECTION_LABELS.get(f.section_ref, f.section_ref).split(".", 1)[0]
+    title = f"{i + 1}. {severity_icon} [{section_label}] {preview}"
     expanded = st.session_state._pending_delete == i
     with st.expander(title, expanded=expanded):
         # ---- Inline edit form ----
