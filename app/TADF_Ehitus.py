@@ -116,42 +116,39 @@ def _format_tokens(n: int) -> str:
 
 
 with st.sidebar:
-    st.divider()
     if _llm_available():
         s = _llm_summary()
-        st.markdown("### 🤖 Расход Claude API")
+        st.markdown("**🤖 Расход Claude API**")
         if s.calls == 0:
             st.caption("Пока ни одного вызова — расход $0.00")
         else:
             cost_eur = s.cost_usd * 0.92  # rough EUR/USD
-            st.metric(
-                label=f"≈ ${s.cost_usd:.4f}  /  €{cost_eur:.4f}",
-                value=f"{s.calls} вызов(ов)",
-            )
-            st.caption(
-                f"↑ {_format_tokens(s.input_tokens)} вход  ·  "
+            st.markdown(
+                f"≈ **\\${s.cost_usd:.4f}** / €{cost_eur:.4f}  ·  "
+                f"{s.calls} вызов(ов)  \n"
+                f"<small>↑ {_format_tokens(s.input_tokens)} вход · "
                 f"↓ {_format_tokens(s.output_tokens)} выход"
-            )
-            if s.cache_read_tokens or s.cache_write_tokens:
-                st.caption(
-                    f"кеш: чтение {_format_tokens(s.cache_read_tokens)}  ·  "
-                    f"запись {_format_tokens(s.cache_write_tokens)}"
+                + (
+                    f"  ·  кеш ↑{_format_tokens(s.cache_write_tokens)} "
+                    f"↓{_format_tokens(s.cache_read_tokens)}"
+                    if s.cache_read_tokens or s.cache_write_tokens
+                    else ""
                 )
-            with st.expander("По моделям"):
+                + "</small>",
+                unsafe_allow_html=True,
+            )
+            with st.expander("По моделям", expanded=False):
                 for model, m in s.by_model.items():
-                    st.write(
-                        f"**{model}**  ·  {int(m['calls'])} вызов(ов)  ·  "
-                        f"${m['cost']:.4f}"
-                    )
-                    st.caption(
-                        f"↑ {_format_tokens(int(m['input']))}  "
-                        f"↓ {_format_tokens(int(m['output']))}  "
-                        f"кеш ↑{_format_tokens(int(m['cache_read']))} "
-                        f"↓{_format_tokens(int(m['cache_write']))}"
+                    st.markdown(
+                        f"**{model}** · {int(m['calls'])} вызов(ов) · "
+                        f"\\${m['cost']:.4f}  \n"
+                        f"<small>↑ {_format_tokens(int(m['input']))} "
+                        f"↓ {_format_tokens(int(m['output']))}</small>",
+                        unsafe_allow_html=True,
                     )
         st.caption(
-            "Цены — оценочные, по публичному прайсу Anthropic (Sonnet $3/$15, "
-            "Haiku $1/$5 за 1M токенов; кеш-чтение ×0.1, кеш-запись ×1.25)."
+            "Цены оценочные (Sonnet \\$3/\\$15, Haiku \\$1/\\$5 за 1M токенов; "
+            "кеш ×0.1/×1.25)."
         )
     else:
-        st.caption("🤖 ИИ-помощник выключен — нет ключа Anthropic API.")
+        st.caption("🤖 ИИ выключен — нет ключа Anthropic.")

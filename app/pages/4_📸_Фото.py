@@ -121,6 +121,11 @@ for i, p in enumerate(audit.photos):
                         result = caption_photo(path, auditor_note=new_caption)
                         p.caption_auditor = result["caption"]
                         p.section_ref = result["section_ref"]
+                        # CRITICAL: also push into the widget's session_state so
+                        # the text_input on the next render shows the new value
+                        # (Streamlit ignores `value=` once the key exists).
+                        st.session_state[f"cap_{i}"] = result["caption"]
+                        st.session_state[f"sec_{i}"] = result["section_ref"]
                         st.session_state.pop(PHOTO_ERROR_KEY, None)
                         status.update(label="Готово ✅", state="complete", expanded=False)
                         set_current(audit)
@@ -128,9 +133,7 @@ for i, p in enumerate(audit.photos):
                         st.session_state[PHOTO_ERROR_KEY] = (
                             f"Подпись фото #{i + 1}: {type(e).__name__}: {e}"
                         )
-                        # Keep status expanded on error so the user sees what failed
                         status.update(label="Ошибка ❌", state="error", expanded=True)
-                # Always rerun so the persisted error (if any) renders at top
                 st.rerun()
         with del_col:
             if st.button("🗑️", key=f"delphoto_{i}"):

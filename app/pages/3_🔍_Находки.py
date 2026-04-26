@@ -347,149 +347,143 @@ for i, f in enumerate(audit.findings):
                     st.success("Изменения сохранены")
                     st.rerun()
 
-        # ---- AI helpers (outside form so they can run mid-edit) ----
-        if llm_on:
-            st.divider()
-            st.caption("🤖 ИИ-помощник для этой находки:")
-            ai_polish_col, ai_rank_col = st.columns(2)
+        # ---- Action row: AI buttons + Delete, immediately after form ----
+        polish_disabled = is_locked(f.section_ref)
+        in_delete = st.session_state._pending_delete == i
 
-            polish_disabled = is_locked(f.section_ref)
-            with ai_polish_col:
+        if in_delete:
+            # Confirm/cancel delete fills the row when active
+            dc1, dc2, _ = st.columns([1, 1, 3])
+            if dc1.button(
+                "✅ Подтвердить удаление", key=f"confirm_del_{scope}_{i}", type="primary"
+            ):
+                audit.findings.pop(i)
+                st.session_state._pending_delete = None
+                set_current(audit)
+                st.rerun()
+            if dc2.button("Отмена", key=f"cancel_del_{scope}_{i}"):
+                st.session_state._pending_delete = None
+                st.rerun()
+        else:
+            cols = st.columns([1, 1, 1, 1])
+            polish_clicked = False
+            rank_clicked = False
+            if llm_on:
+                with cols[0]:
+                    polish_clicked = st.button(
+                        "✏️ Polish",
+                        key=f"polish_btn_{scope}_{i}",
+                        disabled=polish_disabled,
+                        help=(
+                            "Sonnet поправит грамматику и терминологию, не меняя факты."
+                            if not polish_disabled
+                            else "Раздел 11/14 — только аудитор."
+                        ),
+                        use_container_width=True,
+                    )
+                with cols[1]:
+                    rank_clicked = st.button(
+                        "💡 Ссылки",
+                        key=f"rank_btn_{scope}_{i}",
+                        help="Haiku ранжирует подходящие ссылки из курируемого списка.",
+                        use_container_width=True,
+                    )
+            with cols[3]:
                 if st.button(
-                    "✏️ Polish наблюдения",
-                    key=f"polish_btn_{scope}_{i}",
-                    disabled=polish_disabled,
-                    help=(
-                        "Sections 11/14 заблокированы. Sonnet поправит грамматику и "
-                        "терминологию, не меняя факты."
-                        if not polish_disabled
-                        else "Раздел только для аудитора — polish отключён."
-                    ),
+                    "🗑️ Удалить",
+                    key=f"del_{scope}_{i}",
+                    use_container_width=True,
                 ):
-                    with st.status(
-                        "Sonnet 4.6 правит грамматику…", expanded=True
-                    ) as status:
-                        try:
-                            polished = polish_text(
-                                f.observation_raw, section_ref=f.section_ref
-                            )
-                            st.session_state[_polish_key(i)] = polished
-                            _clear_error()
-                            status.update(
-                                label="Готово ✅", state="complete", expanded=False
-                            )
-                        except Exception as e:
-                            _record_error(f"Polish (находка #{i + 1}) не удался", e)
-                            status.update(
-                                label="Ошибка ❌", state="error", expanded=True
-                            )
+                    st.session_state._pending_delete = i
                     st.rerun()
 
-            with ai_rank_col:
-                if st.button(
-                    "💡 Подобрать ссылки на закон",
-                    key=f"rank_btn_{scope}_{i}",
-                    help=(
-                        "Haiku ранжирует подходящие ссылки из курируемого "
-                        "списка для текущего раздела."
-                    ),
-                ):
-                    with st.status(
-                        "Haiku 4.5 ранжирует ссылки на закон…", expanded=True
-                    ) as status:
-                        try:
-                            ranked = rank_legal_refs(
-                                f.observation_raw,
-                                audit_type=audit.type,
-                                section_ref=f.section_ref,
-                            )
-                            st.session_state[_rank_key(i)] = ranked
-                            _clear_error()
-                            status.update(
-                                label="Готово ✅", state="complete", expanded=False
-                            )
-                        except Exception as e:
-                            _record_error(
-                                f"Подбор ссылок (находка #{i + 1}) не удался", e
-                            )
-                            status.update(
-                                label="Ошибка ❌", state="error", expanded=True
-                            )
+            if polish_clicked:
+                with st.status("Sonnet 4.6 правит грамматику…", expanded=True) as status:
+                    try:
+                        polished = polish_text(
+                            f.observation_raw, section_ref=f.section_ref
+                        )
+                        st.session_state[_polish_key(i)] = polished
+                        _clear_error()
+                        status.update(label="Готово ✅", state="complete", expanded=False)
+                    except Exception as e:
+                        _record_error(f"Polish (находка #{i + 1}) не удался", e)
+                        status.update(label="Ошибка ❌", state="error", expanded=True)
+                st.rerun()
+
+            if rank_clicked:
+                with st.status(
+                    "Haiku 4.5 ранжирует ссылки на закон…", expanded=True
+                ) as status:
+                    try:
+                        ranked = rank_legal_refs(
+                            f.observation_raw,
+                            audit_type=audit.type,
+                            section_ref=f.section_ref,
+                        )
+                        st.session_state[_rank_key(i)] = ranked
+                        _clear_error()
+                        status.update(label="Готово ✅", state="complete", expanded=False)
+                    except Exception as e:
+                        _record_error(
+                            f"Подбор ссылок (находка #{i + 1}) не удался", e
+                        )
+                        status.update(label="Ошибка ❌", state="error", expanded=True)
+                st.rerun()
+
+        # ---- Polish result panel ----
+        if llm_on and _polish_key(i) in st.session_state:
+            polished = st.session_state[_polish_key(i)]
+            if polished == f.observation_raw:
+                st.info("✅ Polish: правок не требуется — текст уже чистый.")
+                if st.button("OK", key=f"polish_ok_{scope}_{i}"):
+                    del st.session_state[_polish_key(i)]
                     st.rerun()
-
-            # Polish result panel
-            if _polish_key(i) in st.session_state:
-                polished = st.session_state[_polish_key(i)]
-                if polished == f.observation_raw:
-                    st.info("✅ Polish: правок не требуется — текст уже чистый.")
-                    if st.button("OK", key=f"polish_ok_{scope}_{i}"):
-                        del st.session_state[_polish_key(i)]
-                        st.rerun()
-                else:
-                    st.markdown("**Polish-предложение:**")
-                    pc1, pc2 = st.columns(2)
-                    with pc1:
-                        st.caption("Было:")
-                        st.markdown(f"> {f.observation_raw}")
-                    with pc2:
-                        st.caption("Стало:")
-                        st.markdown(f"> {polished}")
-                    pa, pb = st.columns(2)
-                    if pa.button("✅ Принять polish", key=f"polish_accept_{scope}_{i}"):
-                        f.observation_raw = polished
-                        del st.session_state[_polish_key(i)]
-                        set_current(audit)
-                        st.rerun()
-                    if pb.button("❌ Отклонить polish", key=f"polish_reject_{scope}_{i}"):
-                        del st.session_state[_polish_key(i)]
-                        st.rerun()
-
-            # Ranker result panel
-            if _rank_key(i) in st.session_state:
-                ranked = st.session_state[_rank_key(i)]
-                if not ranked:
-                    st.info("Не нашёл подходящих ссылок для этого раздела.")
-                    if st.button("OK", key=f"rank_ok_{scope}_{i}"):
-                        del st.session_state[_rank_key(i)]
-                        st.rerun()
-                else:
-                    st.markdown("**Предложения ИИ:**")
-                    for code in ranked:
-                        st.write(f"• `{code}`")
-                    ra, rb = st.columns(2)
-                    if ra.button(
-                        "✅ Добавить к находке",
-                        key=f"rank_accept_{scope}_{i}",
-                        type="primary",
-                    ):
-                        merged = list(dict.fromkeys([*f.legal_ref_codes, *ranked]))
-                        f.legal_ref_codes = merged
-                        del st.session_state[_rank_key(i)]
-                        set_current(audit)
-                        st.rerun()
-                    if rb.button("❌ Отклонить", key=f"rank_reject_{scope}_{i}"):
-                        del st.session_state[_rank_key(i)]
-                        st.rerun()
-
-        # ---- Delete (with confirm) ----
-        st.divider()
-        if st.session_state._pending_delete == i:
-            cdel1, cdel2 = st.columns(2)
-            with cdel1:
-                if st.button(
-                    "✅ Подтвердить удаление",
-                    key=f"confirm_del_{scope}_{i}",
-                    type="primary",
-                ):
-                    audit.findings.pop(i)
-                    st.session_state._pending_delete = None
+            else:
+                st.markdown("**Polish-предложение:**")
+                pc1, pc2 = st.columns(2)
+                with pc1:
+                    st.caption("Было:")
+                    st.markdown(f"> {f.observation_raw}")
+                with pc2:
+                    st.caption("Стало:")
+                    st.markdown(f"> {polished}")
+                pa, pb = st.columns(2)
+                if pa.button("✅ Принять polish", key=f"polish_accept_{scope}_{i}"):
+                    f.observation_raw = polished
+                    st.session_state[f"obs_{scope}_{i}"] = polished  # update widget
+                    del st.session_state[_polish_key(i)]
                     set_current(audit)
                     st.rerun()
-            with cdel2:
-                if st.button("Отмена", key=f"cancel_del_{scope}_{i}"):
-                    st.session_state._pending_delete = None
+                if pb.button("❌ Отклонить polish", key=f"polish_reject_{scope}_{i}"):
+                    del st.session_state[_polish_key(i)]
                     st.rerun()
-        else:
-            if st.button("🗑️ Удалить находку", key=f"del_{scope}_{i}"):
-                st.session_state._pending_delete = i
-                st.rerun()
+
+        # ---- Ranker result panel ----
+        if llm_on and _rank_key(i) in st.session_state:
+            ranked = st.session_state[_rank_key(i)]
+            if not ranked:
+                st.info("Не нашёл подходящих ссылок для этого раздела.")
+                if st.button("OK", key=f"rank_ok_{scope}_{i}"):
+                    del st.session_state[_rank_key(i)]
+                    st.rerun()
+            else:
+                st.markdown("**Предложения ИИ:**")
+                for code in ranked:
+                    st.write(f"• `{code}`")
+                ra, rb = st.columns(2)
+                if ra.button(
+                    "✅ Добавить к находке",
+                    key=f"rank_accept_{scope}_{i}",
+                    type="primary",
+                ):
+                    merged = list(dict.fromkeys([*f.legal_ref_codes, *ranked]))
+                    f.legal_ref_codes = merged
+                    # update the multiselect widget too so the new refs show in the form
+                    st.session_state[f"refs_{scope}_{i}"] = merged
+                    del st.session_state[_rank_key(i)]
+                    set_current(audit)
+                    st.rerun()
+                if rb.button("❌ Отклонить", key=f"rank_reject_{scope}_{i}"):
+                    del st.session_state[_rank_key(i)]
+                    st.rerun()
