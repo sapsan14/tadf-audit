@@ -143,11 +143,14 @@ for i, p in enumerate(audit.photos):
                         result = caption_photo(path, auditor_note=new_caption)
                         p.caption_auditor = result["caption"]
                         p.section_ref = result["section_ref"]
-                        # CRITICAL: also push into the widget's session_state so
-                        # the text_input on the next render shows the new value
-                        # (Streamlit ignores `value=` once the key exists).
-                        st.session_state[f"cap_{i}"] = result["caption"]
-                        st.session_state[f"sec_{i}"] = result["section_ref"]
+                        # Defer widget-state update to the next run via the
+                        # `_imp_pending_widget_*` slot that flush_improve_pending()
+                        # consumes at the top of the page. Writing
+                        # st.session_state[widget_key] here would raise
+                        # StreamlitAPIException because the text_input with
+                        # that key has already rendered above.
+                        st.session_state[f"_imp_pending_widget_cap_{i}"] = result["caption"]
+                        st.session_state[f"_imp_pending_widget_sec_{i}"] = result["section_ref"]
                         st.session_state.pop(PHOTO_ERROR_KEY, None)
                         status.update(label="Готово ✅", state="complete", expanded=False)
                         set_current(audit)

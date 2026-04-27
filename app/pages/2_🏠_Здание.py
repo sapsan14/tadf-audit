@@ -19,7 +19,7 @@ from tadf.api.imports import (  # noqa: E402
 )
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.external.ehr_client import lookup_ehr  # noqa: E402
-from tadf.external.links import teatmik_company_url  # noqa: E402
+from tadf.external.links import maaamet_kataster_url, teatmik_company_url  # noqa: E402
 from tadf.intake.document_extract import extract_from_upload  # noqa: E402
 from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.llm.extractor import diff as _extract_diff  # noqa: E402
@@ -401,22 +401,24 @@ ehr_refresh = lc2.button(
         "энергомаркер, обновление адреса, etc)."
     ),
 )
-if b.kataster_no:
-    # X-GIS Maa-info opens the kataster directly on the map. The geoportaal
-    # Kinnistu-otsing form variant requires the user to click "Otsi" first,
-    # which is annoying; this URL skips that step.
+_maa_url = maaamet_kataster_url(b.kataster_no)
+if _maa_url:
+    # xgis2 maainfo accepts KAT_TUNNUS=<katastritunnus> together with
+    # ALAJAOTUS=KIRG_KATASTRIYKSUSED to zoom directly to the parcel.
+    # The earlier `?ku=…` parameter is silently dropped by the viewer
+    # so the user landed on a blank map.
     lc3.link_button(
         "🗺️ Maa-amet",
-        f"https://xgis.maaamet.ee/xgis2/page/app/maainfo?ku={b.kataster_no}",
+        _maa_url,
         use_container_width=True,
-        help="Открывает кадастр на интерактивной карте Maa-amet.",
+        help="Открывает кадастр на интерактивной карте Maa-amet (xgis2 maainfo).",
     )
 else:
     lc2.button(
         "🗺️ Maa-amet (по кадастру)",
         disabled=True,
         key=f"maaamet_disabled_{scope}",
-        help="Введите кадастровый номер слева — ссылка на geoportaal.maaamet.ee активируется.",
+        help="Введите кадастровый номер слева — ссылка на Maa-amet активируется.",
         use_container_width=True,
     )
 

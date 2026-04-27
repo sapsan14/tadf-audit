@@ -112,7 +112,7 @@ st.markdown(
 #   5. Anywhere else: explain where it should be clicked.
 _BOOKMARKLET_SRC = (
     "javascript:(async()=>{"
-    "const TADF='https://tadf-audit.h2oatlas.ee',LS='tadf_connector_token',TTL=86400000;"
+    "const TADF='https://tadf-audit.h2oatlas.ee',LS='tadf_connector_token',TTL=604800000;"
     # Token plumbing
     "const fromHash=()=>{const h=(location.hash||'').replace(/^#/,'');"
     "let aid=null,tok=null,tgt=null;"

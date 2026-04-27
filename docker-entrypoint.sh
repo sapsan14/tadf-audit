@@ -9,13 +9,21 @@
 
 set -euo pipefail
 
-# Generate a random per-container HMAC secret if none is set. The secret
-# only needs to be stable for the lifetime of the container so tokens
-# issued by Streamlit validate against the FastAPI sidecar — both run in
-# the same process tree, so a fresh-each-restart secret is fine and
-# avoids leaking it via env from the compose file.
+# Persist a random HMAC secret across container restarts so tokens issued
+# before a redeploy still validate after. The secret lives on the
+# tadf-data volume next to the SQLite — same retention scope. If the env
+# var is set explicitly (e.g., from compose secrets), prefer that.
+SECRET_FILE="/app/data/.import-secret"
+mkdir -p "$(dirname "$SECRET_FILE")"
 if [[ -z "${TADF_IMPORT_SECRET:-}" ]]; then
-    export TADF_IMPORT_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+    if [[ -s "$SECRET_FILE" ]]; then
+        TADF_IMPORT_SECRET="$(cat "$SECRET_FILE")"
+    else
+        TADF_IMPORT_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+        umask 077
+        printf '%s' "$TADF_IMPORT_SECRET" > "$SECRET_FILE"
+    fi
+    export TADF_IMPORT_SECRET
 fi
 
 # Sidecar — bind to 127.0.0.1 only, Caddy reaches us on the docker
