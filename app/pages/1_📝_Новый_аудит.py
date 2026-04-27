@@ -13,6 +13,7 @@ import streamlit as st  # noqa: E402
 
 from app._state import (  # noqa: E402
     all_saved_drafts,
+    clone_as_new_draft,
     delete_audit_by_id,
     ensure_draft_saved,
     get_current,
@@ -22,7 +23,15 @@ from app._state import (  # noqa: E402
     set_current,
     start_new_draft,
 )
-from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
+from app._widgets import (  # noqa: E402
+    address_picker,
+    combobox,
+    company_picker,
+    flush_improve_pending,
+    hint_caption,
+    improve_button_for,
+)
+from tadf import feature_flags  # noqa: E402
 from tadf.api.imports import (  # noqa: E402
     list_pending,
     map_teatmik,
@@ -30,7 +39,13 @@ from tadf.api.imports import (  # noqa: E402
     mark_rejected,
 )
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
+from tadf.db.lookups import (  # noqa: E402
+    client_names,
+    composer_companies,
+    composer_names,
+)
 from tadf.external.links import teatmik_company_url  # noqa: E402
+from tadf.external.registry_codes import reg_code_hint  # noqa: E402
 from tadf.models import Auditor  # noqa: E402
 
 flush_improve_pending()
@@ -67,7 +82,7 @@ with st.container(border=True):
         for d in drafts:
             is_current = d.id == loaded_id
             with st.container(border=is_current):
-                cc1, cc2, cc3, cc4 = st.columns([5, 2, 1, 1])
+                cc1, cc2, cc3, cc4, cc5 = st.columns([5, 2, 1, 1, 1])
                 addr = (d.building.address or "").strip() or "(адрес не введён)"
                 updated = d.updated_at.strftime("%Y-%m-%d %H:%M") if d.updated_at else "—"
                 cc1.markdown(
@@ -91,9 +106,24 @@ with st.container(border=True):
                         reload_from_db(d.id)
                         st.rerun()
 
+                if cc4.button(
+                    "📑",
+                    key=f"draft_clone_{d.id}",
+                    help=(
+                        "Клонировать как новый черновик: "
+                        "сохраняются аудиторы, тип и подтип, методология; "
+                        "сбрасываются адрес/EHR/кадастр, заказчик, наблюдения, "
+                        "фото, дата осмотра."
+                    ),
+                    use_container_width=True,
+                ):
+                    clone_as_new_draft(d.id)
+                    st.success(f"Черновик клонирован из #{d.id}")
+                    st.rerun()
+
                 pending_key = f"_draft_del_confirm_{d.id}"
                 if st.session_state.get(pending_key):
-                    if cc4.button(
+                    if cc5.button(
                         "✓",
                         key=f"draft_del_ok_{d.id}",
                         type="primary",
@@ -112,7 +142,7 @@ with st.container(border=True):
                         st.session_state.pop(pending_key, None)
                         st.rerun()
                 else:
-                    if cc4.button(
+                    if cc5.button(
                         "🗑️",
                         key=f"draft_del_{d.id}",
                         help="Удалить черновик (с подтверждением)",
@@ -277,23 +307,27 @@ with col1:
     st.subheader("Auditi koostas")
     st.caption("Инженер, который физически готовит отчёт. Может совпадать с проверяющим.")
     audit.composer = Auditor(
-        full_name=st.text_input(
+        full_name=combobox(
             "Имя",
+            suggestions=composer_names(),
             value=audit.composer.full_name,
             key=k("composer_name"),
-            help="ФИО составителя.",
-        ),
-        company=st.text_input(
+            help="ФИО составителя. Подсказки — из прошлых аудитов.",
+        ) or "",
+        company=combobox(
             "Компания",
-            value=audit.composer.company or "",
+            suggestions=composer_companies(),
+            value=audit.composer.company,
             key=k("composer_company"),
             help="Юр. лицо составителя (например TADF Ehitus OÜ или UNTWERP OÜ).",
-        ) or None,
-        company_reg_nr=st.text_input(
-            "Reg. nr",
-            value=audit.composer.company_reg_nr or "",
-            key=k("composer_reg"),
-            help="Регистрационный код компании составителя (8 цифр для OÜ).",
+        ),
+        company_reg_nr=(
+            _composer_reg := st.text_input(
+                "Reg. nr",
+                value=audit.composer.company_reg_nr or "",
+                key=k("composer_reg"),
+                help="Регистрационный код компании составителя (8 цифр для OÜ).",
+            )
         ) or None,
         qualification=st.text_input(
             "Квалификация",
@@ -302,6 +336,7 @@ with col1:
             help="Например «Diplomeeritud ehitusinsener tase 7».",
         ) or None,
     )
+    hint_caption(reg_code_hint(_composer_reg))
 with col2:
     st.subheader("Auditi kontrollis (vastutav pädev isik)")
     st.caption(
@@ -309,12 +344,13 @@ with col2:
         "за отчёт и подписывает его. По умолчанию — Фёдор."
     )
     audit.reviewer = Auditor(
-        full_name=st.text_input(
+        full_name=combobox(
             "Имя",
+            suggestions=composer_names(),
             value=audit.reviewer.full_name,
             key=k("reviewer_name"),
             help="ФИО ответственного лица (vastutav pädev isik).",
-        ),
+        ) or "",
         kutsetunnistus_no=st.text_input(
             "Kutsetunnistus №",
             value=audit.reviewer.kutsetunnistus_no or "",
@@ -329,11 +365,12 @@ with col2:
             value=audit.reviewer.qualification or "Diplomeeritud insener tase 7",
             key=k("reviewer_qual"),
         ) or None,
-        company=st.text_input(
+        company=combobox(
             "Компания",
+            suggestions=composer_companies(),
             value=audit.reviewer.company or "TADF Ehitus OÜ",
             key=k("reviewer_company"),
-        ) or None,
+        ),
     )
 
 st.header("Заказчик (Tellija)")
@@ -342,12 +379,13 @@ if audit.client is None:
     from tadf.models import Client
 
     audit.client = Client(name="")
-audit.client.name = st.text_input(
+audit.client.name = combobox(
     "Название / имя",
+    suggestions=client_names(),
     value=audit.client.name,
     key=k("client_name"),
-    help="Название организации или ФИО физ. лица.",
-)
+    help="Название организации или ФИО физ. лица. Подсказки — из прошлых аудитов.",
+) or ""
 col1, col2, col3 = st.columns(3)
 with col1:
     audit.client.reg_code = st.text_input(
@@ -356,6 +394,7 @@ with col1:
         key=k("client_reg"),
         help="Регистрационный код юр. лица заказчика (если есть). Для физ. лица оставить пустым.",
     ) or None
+    hint_caption(reg_code_hint(audit.client.reg_code))
 with col2:
     audit.client.contact_email = st.text_input(
         "E-mail", value=audit.client.contact_email or "", key=k("client_email")
@@ -364,11 +403,30 @@ with col3:
     audit.client.contact_phone = st.text_input(
         "Телефон", value=audit.client.contact_phone or "", key=k("client_phone")
     ) or None
+def _apply_inads_to_client(hit) -> None:  # type: AddressHit
+    audit.client.address = hit.address
+    set_current(audit)
+    # Force the text_input below to reseed from the new model value.
+    st.session_state.pop(k("client_addr"), None)
+    st.session_state.pop(f"_addr_search_client_{scope}", None)
+    st.session_state.pop(f"_addr_q_client_{scope}", None)
+    st.rerun()
+
+
+address_picker(
+    key_prefix=f"client_{scope}",
+    on_select=_apply_inads_to_client,
+    label="🔎 Найти адрес заказчика в Maa-amet",
+)
+
 audit.client.address = st.text_input(
     "Адрес заказчика",
     value=audit.client.address or "",
     key=k("client_addr"),
-    help="Адрес для переписки с заказчиком (может отличаться от адреса объекта).",
+    help=(
+        "Адрес для переписки с заказчиком (может отличаться от адреса объекта). "
+        "Можно набрать вручную или выбрать через поиск выше."
+    ),
 ) or None
 improve_button_for(
     text=audit.client.address or "",
@@ -387,37 +445,66 @@ improve_button_for(
 # the model on the next render's `value=` parameter.
 ensure_draft_saved(audit)
 
-# Teatmik deep-link. URL fragment carries `&target=client` so the
-# in-browser helper sends a hint and we apply directly to the client
-# bundle (name + reg_code + address + email + phone) on the Новый аудит
-# page below — no designer/builder/client picker.
-# The button is ALWAYS rendered: when there's no name/reg-code yet, it
-# renders disabled with a hint so the auditor sees the integration exists.
-_tk_query = (audit.client.reg_code or audit.client.name or "").strip()
-_tk_link = teatmik_company_url(_tk_query) if _tk_query else None
-if _tk_link:
-    if audit.id is not None:
-        token = _issue_token(audit.id)
-        sep = "&" if "#" in _tk_link else "#"
-        _tk_link = f"{_tk_link}{sep}tadf={token}&target=client"
-        _tk_label = "🔎 Найти в Teatmik (авто-импорт)"
-    else:
-        _tk_label = "🔎 Найти в Teatmik (без авто-импорта — сохрани аудит)"
-    st.link_button(_tk_label, _tk_link)
-else:
-    st.button(
-        "🔎 Найти в Teatmik",
-        disabled=True,
-        key=f"teatmik_client_disabled_{scope}",
-        help=(
-            "Введите название заказчика или его рег-код выше — "
-            "ссылка на Teatmik активируется."
-        ),
-    )
-st.caption(
-    "💡 Импорт работает после установки bookmarklet / Tampermonkey — "
-    "см. страницу **🔌 Подключения**."
+# Ariregister company picker — primary path. Replaces the Teatmik
+# bookmarklet flow with a one-click in-app search against the official
+# RIK autocomplete API (no auth, no CAPTCHA).
+
+
+def _apply_company_to_client(hit) -> None:  # type: CompanyHit
+    if audit.client is None:
+        from tadf.models import Client as _Client
+        audit.client = _Client(name="")
+    audit.client.name = hit.name
+    audit.client.reg_code = hit.reg_code
+    if hit.address:
+        audit.client.address = hit.address
+    set_current(audit)
+    # Reseed any widgets we just changed.
+    for w in (k("client_name"), k("client_reg"), k("client_addr")):
+        st.session_state.pop(w, None)
+    # Collapse the picker.
+    st.session_state.pop(f"_co_search_client_{scope}", None)
+    st.session_state.pop(f"_co_q_client_{scope}", None)
+    st.rerun()
+
+
+company_picker(
+    key_prefix=f"client_{scope}",
+    on_select=_apply_company_to_client,
+    label="🔎 Найти заказчика в Ariregister",
 )
+
+# Optional fallback — the old Teatmik bookmarklet/userscript flow remains
+# fully functional behind a feature flag (see «Подключения» page). Hidden
+# inside a collapsed expander so it doesn't compete with Ariregister for
+# attention but stays one click away if Ariregister ever fails.
+if feature_flags.teatmik_enabled():
+    with st.expander("🌐 Альтернативный источник: Teatmik (резерв)", expanded=False):
+        _tk_query = (audit.client.reg_code or audit.client.name or "").strip()
+        _tk_link = teatmik_company_url(_tk_query) if _tk_query else None
+        if _tk_link:
+            if audit.id is not None:
+                token = _issue_token(audit.id)
+                sep = "&" if "#" in _tk_link else "#"
+                _tk_link = f"{_tk_link}{sep}tadf={token}&target=client"
+                _tk_label = "🔎 Найти в Teatmik (авто-импорт)"
+            else:
+                _tk_label = "🔎 Найти в Teatmik (без авто-импорта — сохрани аудит)"
+            st.link_button(_tk_label, _tk_link)
+        else:
+            st.button(
+                "🔎 Найти в Teatmik",
+                disabled=True,
+                key=f"teatmik_client_disabled_{scope}",
+                help=(
+                    "Введите название заказчика или его рег-код выше — "
+                    "ссылка на Teatmik активируется."
+                ),
+            )
+        st.caption(
+            "💡 Импорт работает после установки bookmarklet / Tampermonkey — "
+            "см. страницу **🔌 Подключения**."
+        )
 
 # ---------------------------------------------------------------------------
 # 📥 Pending imports from Teatmik bookmarklet/userscript with target=client.
@@ -485,7 +572,8 @@ def _render_pending_client_imports() -> None:
                 st.rerun(scope="app")
 
 
-_render_pending_client_imports()
+if feature_flags.teatmik_enabled():
+    _render_pending_client_imports()
 
 set_current(audit)
 st.success(f"Текущий номер: **{audit.display_no()}** ({audit.type} / {audit.subtype})")

@@ -10,7 +10,13 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import ensure_draft_saved, get_current, set_current  # noqa: E402
-from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
+from app._widgets import (  # noqa: E402
+    address_picker,
+    company_picker,
+    flush_improve_pending,
+    improve_button_for,
+)
+from tadf import feature_flags  # noqa: E402
 from tadf.api.imports import (  # noqa: E402
     list_pending,
     map_teatmik,
@@ -19,8 +25,11 @@ from tadf.api.imports import (  # noqa: E402
 )
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.external.ehr_client import lookup_ehr  # noqa: E402
-from tadf.external.links import teatmik_company_url  # noqa: E402
-from tadf.intake.document_extract import extract_from_upload  # noqa: E402
+from tadf.external.links import maaamet_kataster_url, teatmik_company_url  # noqa: E402
+from tadf.intake.document_extract import (  # noqa: E402
+    LibreofficeMissing,
+    extract_from_upload,
+)
 from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.llm.extractor import diff as _extract_diff  # noqa: E402
 
@@ -34,6 +43,33 @@ def _with_token_fragment(url: str, audit_id: int, *, target: str | None = None) 
     sep = "&" if "#" in url else "#"
     extra = f"&target={target}" if target else ""
     return f"{url}{sep}tadf={token}{extra}"
+
+
+def _coerce_for_building_field(field_name: str, value):
+    """Coerce extractor output to the Pydantic-declared type for that field.
+
+    Pydantic v2 doesn't validate on plain `setattr` (no `validate_assignment`),
+    so an int slipping into a `float | None` field reaches `st.number_input`
+    as int and trips StreamlitMixedNumericTypesError when the widget's
+    min_value/step are floats. Coerce here so both `b.field` and
+    `st.session_state[widget_key]` carry the right type.
+    """
+    if value is None:
+        return None
+    from typing import get_args
+
+    from tadf.models import Building as _B
+
+    info = _B.model_fields.get(field_name)
+    if info is None:
+        return value
+    args = [a for a in get_args(info.annotation) if a is not type(None)]
+    target = args[0] if len(args) == 1 else info.annotation
+    if target is float and isinstance(value, int) and not isinstance(value, bool):
+        return float(value)
+    if target is int and isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
 
 flush_improve_pending()
 
@@ -62,8 +98,9 @@ _PENDING_KEY = f"_pending_b_{scope}"
 if _PENDING_KEY in st.session_state:
     pending = st.session_state.pop(_PENDING_KEY)
     for field, value in pending.items():
+        coerced = _coerce_for_building_field(field, value)
         if hasattr(b, field):
-            setattr(b, field, value)
+            setattr(b, field, coerced)
         # Bulletproof reseed of the widget state. We're at the very top
         # of the script — no widgets instantiated yet — so writing the
         # widget's session_state key is allowed (Streamlit only forbids
@@ -72,10 +109,10 @@ if _PENDING_KEY in st.session_state:
         # session_state value directly forces the widget to render the
         # new value on this run.
         widget_key = k(field)
-        if value is None:
+        if coerced is None:
             st.session_state.pop(widget_key, None)
         else:
-            st.session_state[widget_key] = value
+            st.session_state[widget_key] = coerced
     audit.building = b
     set_current(audit)
 
@@ -166,7 +203,8 @@ def _render_pending_teatmik_imports() -> None:
                 st.rerun(scope="app")
 
 
-_render_pending_teatmik_imports()
+if feature_flags.teatmik_enabled():
+    _render_pending_teatmik_imports()
 
 
 # ---------------------------------------------------------------------------
@@ -185,14 +223,19 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
         )
     else:
         st.caption(
-            "Загрузите DOCX/PDF архитектурного проекта (пояснительная записка / "
-            "*seletuskiri*). Claude (Haiku 4.5) попытается извлечь поля здания. "
-            "Каждое поле показывается в превью с галочкой — применяются только "
-            "выбранные."
+            "Загрузите DOCX / PDF / DOC / ASiC-E архитектурного проекта "
+            "(пояснительная записка / *seletuskiri*). Claude (Haiku 4.5) "
+            "попытается извлечь поля здания. Каждое поле показывается "
+            "в превью с галочкой — применяются только выбранные."
+        )
+        st.caption(
+            "ℹ️ `.doc` и `.asice` с `.doc`-вложением требуют LibreOffice "
+            "на сервере (`apt-get install libreoffice`). Если его нет — "
+            "конвертируйте файл в DOCX/PDF локально и загрузите снова."
         )
         uploaded = st.file_uploader(
             "Файл проекта",
-            type=["docx", "pdf"],
+            type=["docx", "pdf", "doc", "asice"],
             accept_multiple_files=False,
             key=f"extract_upload_{scope}",
         )
@@ -209,6 +252,14 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
                     st.session_state[_EXTRACT_KEY] = extracted
                     st.session_state[_EXTRACT_RAW_KEY] = raw_text
                     status.update(label="Готово ✅", state="complete", expanded=False)
+                except LibreofficeMissing:
+                    status.update(label="Нужен LibreOffice ⚠️", state="error", expanded=True)
+                    st.error(
+                        "Чтобы открыть `.doc` (или `.asice` с `.doc` внутри), "
+                        "на сервере нужен LibreOffice. "
+                        "Локально — `apt-get install libreoffice`. "
+                        "Альтернатива: сохраните файл в DOCX/PDF и загрузите снова."
+                    )
                 except Exception as e:  # noqa: BLE001
                     status.update(label="Ошибка ❌", state="error", expanded=True)
                     st.error(f"Не удалось извлечь данные: {type(e).__name__}: {e}")
@@ -240,8 +291,23 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
                 for field, cur, proposed in rows:
                     rc1, rc2, rc3, rc4 = st.columns([2, 3, 3, 1])
                     rc1.write(f"`{field}`")
-                    rc2.write("(пусто)" if cur in (None, "") else str(cur))
-                    rc3.write(str(proposed))
+                    cur_display = "(пусто)" if cur in (None, "") else str(cur)
+                    rc2.write(cur_display)
+                    # Highlight the «Извлечено» cell so the auditor sees at a
+                    # glance which fields actually differ from what they
+                    # already had. Yellow = filling an empty slot, green =
+                    # overwriting a previous value.
+                    if cur in (None, ""):
+                        bg = "#fef9c3"  # yellow-100
+                        icon = "🟡"
+                    else:
+                        bg = "#dcfce7"  # green-100
+                        icon = "🟢"
+                    rc3.markdown(
+                        f"<div style='background:{bg};padding:2px 8px;"
+                        f"border-radius:4px'>{icon} {str(proposed)}</div>",
+                        unsafe_allow_html=True,
+                    )
                     accept[field] = rc4.checkbox(
                         "",
                         value=True,
@@ -275,15 +341,47 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
                         st.text(raw[:5000] + ("…" if len(raw) > 5000 else ""))
 
 
+def _apply_inads_hit(hit) -> None:  # type: AddressHit
+    update = {"address": hit.address}
+    if hit.kataster and not (b.kataster_no or "").strip():
+        update["kataster_no"] = hit.kataster
+    st.session_state[_PENDING_KEY] = update
+    # Clear the picker's own state so the dropdown collapses on rerun.
+    st.session_state.pop(f"_addr_search_b_{scope}", None)
+    st.session_state.pop(f"_addr_q_b_{scope}", None)
+    st.rerun()
+
+
+address_picker(
+    key_prefix=f"b_{scope}",
+    on_select=_apply_inads_hit,
+    label="🔎 Найти адрес в Maa-amet (in-ADS)",
+)
+
 b.address = st.text_input(
     "Адрес объекта (Aadress)",
     value=b.address,
     key=k("address"),
     help=(
         "Полный почтовый адрес здания в формате «улица номер, населённый пункт, "
-        "уезд». Например: «Auga tn 8, Narva-Jõesuu linn, Ida-Viru maakond»."
+        "уезд». Например: «Auga tn 8, Narva-Jõesuu linn, Ida-Viru maakond». "
+        "Можно набрать вручную или выбрать через поиск выше — тогда подтянется "
+        "и кадастровый номер, если он пустой."
     ),
 )
+
+_client_addr = (audit.client.address or "").strip() if audit.client else ""
+_b_addr_now = (b.address or "").strip()
+if _client_addr and not _b_addr_now and st.button(
+    f"⤓ Использовать адрес заказчика: {_client_addr}",
+    key=f"copy_client_addr_{scope}",
+    help=(
+        "Частый случай — физлицо аудитит свой собственный дом. "
+        "Заполняет адрес объекта значением, уже введённым в карточке заказчика."
+    ),
+):
+    st.session_state[_PENDING_KEY] = {"address": _client_addr}
+    st.rerun()
 
 col1, col2 = st.columns(2)
 with col1:
@@ -358,22 +456,24 @@ ehr_refresh = lc2.button(
         "энергомаркер, обновление адреса, etc)."
     ),
 )
-if b.kataster_no:
-    # X-GIS Maa-info opens the kataster directly on the map. The geoportaal
-    # Kinnistu-otsing form variant requires the user to click "Otsi" first,
-    # which is annoying; this URL skips that step.
+_maa_url = maaamet_kataster_url(b.kataster_no)
+if _maa_url:
+    # xgis2 maainfo accepts KAT_TUNNUS=<katastritunnus> together with
+    # ALAJAOTUS=KIRG_KATASTRIYKSUSED to zoom directly to the parcel.
+    # The earlier `?ku=…` parameter is silently dropped by the viewer
+    # so the user landed on a blank map.
     lc3.link_button(
         "🗺️ Maa-amet",
-        f"https://xgis.maaamet.ee/xgis2/page/app/maainfo?ku={b.kataster_no}",
+        _maa_url,
         use_container_width=True,
-        help="Открывает кадастр на интерактивной карте Maa-amet.",
+        help="Открывает кадастр на интерактивной карте Maa-amet (xgis2 maainfo).",
     )
 else:
     lc2.button(
         "🗺️ Maa-amet (по кадастру)",
         disabled=True,
         key=f"maaamet_disabled_{scope}",
-        help="Введите кадастровый номер слева — ссылка на geoportaal.maaamet.ee активируется.",
+        help="Введите кадастровый номер слева — ссылка на Maa-amet активируется.",
         use_container_width=True,
     )
 
@@ -605,50 +705,87 @@ st.caption(
     "Ссылка «🔎 Teatmik» открывает реестр предприятий в новой вкладке "
     "(там можно проверить рег-код, адрес и статус)."
 )
+def _apply_company_to_slot(slot: str):
+    def _cb(hit) -> None:  # type: CompanyHit
+        st.session_state[_PENDING_KEY] = {slot: hit.name}
+        st.session_state.pop(f"_co_search_{slot}_{scope}", None)
+        st.session_state.pop(f"_co_q_{slot}_{scope}", None)
+        st.rerun()
+    return _cb
+
+
 col1, col2 = st.columns(2)
 with col1:
+    company_picker(
+        key_prefix=f"designer_{scope}",
+        on_select=_apply_company_to_slot("designer"),
+        label="🔎 Найти проектировщика в Ariregister",
+    )
     b.designer = st.text_input(
         "Designer (projekteerija)",
         value=b.designer or "",
         key=k("designer"),
         help=(
             "Кто проектировал здание (физ. лицо или фирма). "
-            "Берётся из ehitusprojekti документации, если есть."
+            "Можно набрать вручную или выбрать через поиск выше."
         ),
     ) or None
-    _designer_link = teatmik_company_url(b.designer) if b.designer else None
-    if _designer_link:
-        if audit.id is not None:
-            _designer_link = _with_token_fragment(_designer_link, audit.id, target="designer")
-        st.link_button("🔎 Teatmik (designer)", _designer_link, use_container_width=True)
-    else:
-        st.button(
-            "🔎 Teatmik (designer)",
-            disabled=True,
-            key=f"teatmik_designer_disabled_{scope}",
-            help="Введите имя проектировщика выше — ссылка на Teatmik активируется.",
-            use_container_width=True,
-        )
+    if feature_flags.teatmik_enabled():
+        with st.expander("🌐 Альтернативно: Teatmik (designer)", expanded=False):
+            _designer_link = teatmik_company_url(b.designer) if b.designer else None
+            if _designer_link:
+                if audit.id is not None:
+                    _designer_link = _with_token_fragment(
+                        _designer_link, audit.id, target="designer"
+                    )
+                st.link_button(
+                    "🔎 Teatmik (designer)", _designer_link, use_container_width=True
+                )
+            else:
+                st.button(
+                    "🔎 Teatmik (designer)",
+                    disabled=True,
+                    key=f"teatmik_designer_disabled_{scope}",
+                    help=(
+                        "Введите имя проектировщика выше — "
+                        "ссылка на Teatmik активируется."
+                    ),
+                    use_container_width=True,
+                )
 with col2:
+    company_picker(
+        key_prefix=f"builder_{scope}",
+        on_select=_apply_company_to_slot("builder"),
+        label="🔎 Найти строителя в Ariregister",
+    )
     b.builder = st.text_input(
         "Builder (ehitaja)",
         value=b.builder or "",
         key=k("builder"),
-        help="Кто строил здание (генподрядчик).",
+        help=(
+            "Кто строил здание (генподрядчик). "
+            "Можно набрать вручную или выбрать через поиск выше."
+        ),
     ) or None
-    _builder_link = teatmik_company_url(b.builder) if b.builder else None
-    if _builder_link:
-        if audit.id is not None:
-            _builder_link = _with_token_fragment(_builder_link, audit.id, target="builder")
-        st.link_button("🔎 Teatmik (builder)", _builder_link, use_container_width=True)
-    else:
-        st.button(
-            "🔎 Teatmik (builder)",
-            disabled=True,
-            key=f"teatmik_builder_disabled_{scope}",
-            help="Введите имя строителя выше — ссылка на Teatmik активируется.",
-            use_container_width=True,
-        )
+    if feature_flags.teatmik_enabled():
+        with st.expander("🌐 Альтернативно: Teatmik (builder)", expanded=False):
+            _builder_link = teatmik_company_url(b.builder) if b.builder else None
+            if _builder_link:
+                if audit.id is not None:
+                    _builder_link = _with_token_fragment(
+                        _builder_link, audit.id, target="builder"
+                    )
+                st.link_button(
+                    "🔎 Teatmik (builder)", _builder_link, use_container_width=True
+                )
+            else:
+                st.button(
+                    "🔎 Teatmik (builder)",
+                    disabled=True,
+                    key=f"teatmik_builder_disabled_{scope}",
+                    help="Введите имя строителя выше — ссылка на Teatmik активируется.",
+                    use_container_width=True,
+                )
 
 if b.pre_2003:
     b.substitute_docs_note = st.text_area(

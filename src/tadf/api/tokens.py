@@ -20,7 +20,7 @@ import os
 import secrets
 import time
 
-_TOKEN_TTL_SECONDS = 24 * 3600
+_TOKEN_TTL_SECONDS = 7 * 24 * 3600  # 7 days — matches the typical audit work cycle
 _SEPARATOR = ":"
 
 

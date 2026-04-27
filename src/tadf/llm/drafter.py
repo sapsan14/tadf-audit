@@ -8,6 +8,7 @@ plan. Anything that reaches those sections is the auditor's own writing.
 from __future__ import annotations
 
 from tadf.llm.client import MODEL_DRAFTER, complete_text
+from tadf.llm.fewshot import examples_for, format_for_prompt
 from tadf.sections import SECTION_LABELS
 
 # Sections where the auditor must write — no LLM drafting, no LLM polish.
@@ -43,8 +44,20 @@ lisajuttu, ei mingit "Vastus:" prefiksit.
 """
 
 
-def draft_narrative(section_ref: str, bullets: str) -> str:
-    """Expand bullet observations into a formal Estonian paragraph."""
+def draft_narrative(
+    section_ref: str,
+    bullets: str,
+    *,
+    subtype: str | None = None,
+) -> str:
+    """Expand bullet observations into a formal Estonian paragraph.
+
+    `subtype` (optional: 'erakorraline' / 'kasutuseelne' / 'korraline')
+    biases corpus retrieval toward same-subtype examples. When omitted,
+    examples from any subtype are eligible. The retrieved examples are
+    prepended to the user message as in-context style references — the
+    LLM is instructed to mimic style, not facts.
+    """
     if is_locked(section_ref):
         raise ValueError(
             f"Section {section_ref} is auditor-only — narrative drafting is disabled."
@@ -55,7 +68,13 @@ def draft_narrative(section_ref: str, bullets: str) -> str:
         raise ValueError("Empty bullets — nothing to draft.")
 
     section_label = SECTION_LABELS.get(section_ref, section_ref)
-    user = f"Jaotis: {section_label}\n\nInseneri märkused:\n{bullets}"
+    examples_block = format_for_prompt(examples_for(section_ref, subtype=subtype))
+    prefix = f"{examples_block}\n" if examples_block else ""
+    user = (
+        f"{prefix}"
+        f"Jaotis: {section_label}\n\n"
+        f"Inseneri märkused:\n{bullets}"
+    )
     return complete_text(
         model=MODEL_DRAFTER,
         system=SYSTEM_PROMPT,

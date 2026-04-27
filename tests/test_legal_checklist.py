@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from tadf.legal.checklist import check, passes
+from tadf.legal.checklist import check, passes, soft_warnings
+from tadf.models import Finding
 
 
 def test_minimal_audit_passes(audit):
@@ -51,3 +52,47 @@ def test_pre_2003_substitute_docs_satisfies_construction_year(audit):
     audit.building.substitute_docs_note = "Originaaldokumendid puuduvad; audit asendab."
     fields = {m.field for m in check(audit)}
     assert "building.construction_year" not in fields
+
+
+def test_soft_warning_fires_for_major_finding_without_legal_ref(audit):
+    audit.findings.append(
+        Finding(
+            section_ref="6.1",
+            severity="nonconf_major",
+            observation_raw="Vundamendi pragunemine.",
+            legal_ref_codes=[],
+        )
+    )
+    warnings = soft_warnings(audit)
+    assert any(
+        w.field.endswith(".legal_ref_codes") for w in warnings
+    ), [w.field for w in warnings]
+
+
+def test_soft_warning_skips_info_severity(audit):
+    audit.findings.append(
+        Finding(
+            section_ref="6.1",
+            severity="info",
+            observation_raw="Hoone üldine seisukord rahuldav.",
+            legal_ref_codes=[],
+        )
+    )
+    warnings = soft_warnings(audit)
+    assert not any(w.field.endswith("[2].legal_ref_codes") for w in warnings)
+
+
+def test_soft_warning_skips_locked_sections(audit):
+    audit.findings.append(
+        Finding(
+            section_ref="11",
+            severity="nonconf_major",
+            observation_raw="Kokkuvõte test.",
+            legal_ref_codes=[],
+        )
+    )
+    warnings = soft_warnings(audit)
+    # The new finding is at index len-1; its field shouldn't appear because
+    # section 11 is auditor-only and excluded from the soft check.
+    last_idx = len(audit.findings) - 1
+    assert not any(f"[{last_idx}].legal_ref_codes" in w.field for w in warnings)

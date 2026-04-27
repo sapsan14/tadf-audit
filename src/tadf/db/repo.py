@@ -312,6 +312,16 @@ def upsert_audit(s: Session, audit: Audit) -> int:
     return row.id
 
 
+def next_seq_no(s: Session, year: int) -> int:
+    """Next auditor-facing audit number for the given year (1-based).
+
+    Counts every row, including drafts, so two drafts created the same
+    day cannot collide. If the year is empty, returns 1.
+    """
+    current = s.query(func.max(AuditRow.seq_no)).filter(AuditRow.year == year).scalar()
+    return int(current or 0) + 1
+
+
 def delete_audit(s: Session, audit_id: int) -> None:
     """Hard-delete an audit and its findings/photos (cascade).
 

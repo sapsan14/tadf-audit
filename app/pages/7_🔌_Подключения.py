@@ -29,8 +29,106 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import get_current  # noqa: E402
+from tadf import feature_flags  # noqa: E402
+from tadf.external.prewarm import warm_all  # noqa: E402
 
-st.title("🔌 Подключения — Teatmik без копипастов")
+st.title("🔌 Подключения и источники данных")
+
+st.header("📚 Источники реквизитов компаний")
+
+st.markdown(
+    """
+TADF берёт данные из официальных эстонских источников:
+
+- **Ariregister** (`avaandmed.ariregister.rik.ee`) — основной источник.
+  Прямой HTTP-запрос к публичному autocomplete-API RIK, без авторизации
+  и CAPTCHA. Поиск по названию или 8-значному рег-коду — кэшируется на
+  7 дней, повторные поиски работают офлайн.
+- **In-ADS** (`inaadress.maaamet.ee`) — официальный адресный регистр
+  Maa-amet. Используется для нормализации адресов (объект, заказчик)
+  и подтягивания кадастрового номера. Кэш — 30 дней.
+- **EHR** (`livekluster.ehr.ee`) — Ehitisregister, источник техданных
+  здания (площадь, этажность, год). Прямой API, без CAPTCHA.
+- **Teatmik** (`teatmik.ee`) — резервный источник через Tampermonkey/
+  bookmarklet (см. ниже). Защищён Cloudflare CAPTCHA, требует ручного
+  шага в браузере. По умолчанию резерв включён — отключите, как только
+  убедитесь, что Ariregister покрывает все ваши кейсы.
+
+> **Tier-3 расширение Ariregister** (детальные данные с email/phone,
+> change list) активируется автоматически после установки переменных
+> окружения `ARIREGISTER_USERNAME` / `ARIREGISTER_PASSWORD` (creds от
+> contractual customer agreement RIK — бесплатно, оформляется на
+> [ariregister.rik.ee/eng/contract](https://ariregister.rik.ee/eng/contract)).
+"""
+)
+
+with st.container(border=True):
+    st.subheader("🌐 Резервный источник: Teatmik")
+    current = feature_flags.teatmik_enabled()
+    new_value = st.toggle(
+        "Показывать Teatmik как резервный источник",
+        value=current,
+        key="ff_teatmik_toggle",
+        help=(
+            "Когда включён — на страницах «Новый аудит» и «Здание» рядом с "
+            "Ariregister-пикерами появится свернутый блок «🌐 Альтернативно: "
+            "Teatmik» с кнопкой ручного перехода и Tampermonkey/bookmarklet-"
+            "импортом. Когда выключен — все следы Teatmik в UI скрыты, "
+            "Ariregister работает один. Логика и эндпоинты не удалены — флаг "
+            "в любой момент возвращает прежний поток."
+        ),
+    )
+    if new_value != current:
+        feature_flags.set_("teatmik_enabled", new_value)
+        st.toast(
+            "Teatmik " + ("включён" if new_value else "выключен"),
+            icon="✅",
+        )
+        st.rerun()
+    if not current:
+        st.caption(
+            "Teatmik сейчас скрыт. Все источники реквизитов идут через Ariregister + "
+            "локальный кэш + дамп Open Data (если скачан)."
+        )
+    else:
+        st.caption(
+            "Teatmik виден как свернутая опция. После того как поработаете "
+            "несколько недель только на Ariregister без откатов — отключите "
+            "флаг, и весь старый поток исчезнет из UI без потери возможности "
+            "вернуть его обратно."
+        )
+
+with st.container(border=True):
+    st.subheader("📦 Офлайн-кэш")
+    st.markdown(
+        """
+TADF держит локальный кэш всех просмотренных компаний (Ariregister)
+и адресов (in-ADS). После первого онлайн-запуска можно работать без
+сети: пикеры берут данные из кэша.
+
+Кэш прогревается автоматически при старте — фоновый поток обновляет
+данные всех клиентов и адресов из вашей БД. Кнопка ниже запускает
+прогрев вручную (например, после массового импорта или перед поездкой
+без интернета).
+"""
+    )
+    if st.button(
+        "🔄 Прогреть кэш сейчас",
+        type="primary",
+        help=(
+            "Перебирает все рег-коды и адреса из БД и запрашивает их "
+            "в Ariregister + in-ADS. Может занять секунды-минуты в "
+            "зависимости от количества записей."
+        ),
+    ):
+        with st.spinner("Прогреваю кэш — это может занять минуту…"):
+            stats = warm_all()
+        st.success(
+            f"Готово. Компании: {stats.companies_warmed}/{stats.companies_seen} · "
+            f"Адреса: {stats.addresses_warmed}/{stats.addresses_seen}"
+        )
+
+st.divider()
 
 st.markdown(
     """
@@ -112,7 +210,7 @@ st.markdown(
 #   5. Anywhere else: explain where it should be clicked.
 _BOOKMARKLET_SRC = (
     "javascript:(async()=>{"
-    "const TADF='https://tadf-audit.h2oatlas.ee',LS='tadf_connector_token',TTL=86400000;"
+    "const TADF='https://tadf-audit.h2oatlas.ee',LS='tadf_connector_token',TTL=604800000;"
     # Token plumbing
     "const fromHash=()=>{const h=(location.hash||'').replace(/^#/,'');"
     "let aid=null,tok=null,tgt=null;"
@@ -180,8 +278,7 @@ _BOOKMARKLET_SRC = (
 st.markdown(
     """
 1. **Откройте панель закладок в браузере.**
-   - Chrome / Edge: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
-   - Firefox: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
+   - Chrome / Edge / Firefox: `Ctrl + Shift + B` (Windows / Linux), `⌘ + Shift + B` (Mac)
    - Safari: меню *Bookmarks → Show Bookmarks Bar*
 2. **Перетащите кнопку ниже на панель закладок.** Drag-and-drop, как
    обычную ссылку.

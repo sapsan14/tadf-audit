@@ -49,13 +49,18 @@ if uploaded:
         index=ALL_SECTION_KEYS.index("16") if "16" in ALL_SECTION_KEYS else 0,
     )
     if st.button(f"Сохранить {len(uploaded)} фото", type="primary"):
-        already_saved = {p.sha256 for p in audit.photos if p.sha256}
-        added = 0
+        existing = {p.sha256 for p in audit.photos if p.sha256}
+        progress = st.progress(0.0, text="Подготовка…")
+        new_count = 0
         skipped = 0
-        for f in uploaded:
+        for idx, f in enumerate(uploaded, start=1):
             data = f.read()
             sha = hashlib.sha256(data).hexdigest()[:16]
-            if sha in already_saved:
+            progress.progress(
+                idx / len(uploaded),
+                text=f"{idx}/{len(uploaded)}: {f.name}",
+            )
+            if sha in existing:
                 skipped += 1
                 continue
             ext = Path(f.name).suffix
@@ -76,13 +81,17 @@ if uploaded:
                     gps_lon=exif.get("gps_lon"),
                 )
             )
-            added += 1
+            existing.add(sha)
+            new_count += 1
+        progress.empty()
         set_current(audit)
         ensure_draft_saved(audit)  # persist the new photo rows immediately
-        msg = f"Сохранено {added} фото"
         if skipped:
-            msg += f" (пропущено дубликатов: {skipped})"
-        st.success(msg)
+            st.success(
+                f"Сохранено {new_count} фото · пропущено {skipped} дубликат(а/ов)"
+            )
+        else:
+            st.success(f"Сохранено {new_count} фото")
         st.rerun()
 
 st.subheader(f"Загруженные фото ({len(audit.photos)})")
@@ -207,11 +216,14 @@ for col_idx, (i, p) in enumerate(_indexed_photos):
                         result = caption_photo(path, auditor_note=new_caption)
                         p.caption_auditor = result["caption"]
                         p.section_ref = result["section_ref"]
-                        # CRITICAL: also push into the widget's session_state so
-                        # the text_input on the next render shows the new value
-                        # (Streamlit ignores `value=` once the key exists).
-                        st.session_state[f"cap_{i}"] = result["caption"]
-                        st.session_state[f"sec_{i}"] = result["section_ref"]
+                        # Defer widget-state update to the next run via the
+                        # `_imp_pending_widget_*` slot that flush_improve_pending()
+                        # consumes at the top of the page. Writing
+                        # st.session_state[widget_key] here would raise
+                        # StreamlitAPIException because the text_input with
+                        # that key has already rendered above.
+                        st.session_state[f"_imp_pending_widget_cap_{i}"] = result["caption"]
+                        st.session_state[f"_imp_pending_widget_sec_{i}"] = result["section_ref"]
                         st.session_state.pop(PHOTO_ERROR_KEY, None)
                         status.update(label="Готово ✅", state="complete", expanded=False)
                         set_current(audit)
