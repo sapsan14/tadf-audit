@@ -41,14 +41,16 @@ def test_teatmik_reg_code_goes_to_personlegal() -> None:
 def test_teatmik_name_goes_to_search() -> None:
     url = teatmik_company_url("UNTWERP OÜ")
     assert url is not None
-    assert "search?query=" in url
+    # Teatmik uses path-style search, not ?query=…
+    assert "/et/search/" in url
     assert "UNTWERP" in url
 
 
 def test_teatmik_url_encodes_special_chars() -> None:
     url = teatmik_company_url("AS Teede & Sillad")
     assert url is not None
-    assert "%26" in url or "&" not in url.split("query=", 1)[1]
+    # `&` must be percent-encoded so it's part of the path, not a separator.
+    assert "%26" in url
 
 
 def test_teatmik_empty_returns_none() -> None:

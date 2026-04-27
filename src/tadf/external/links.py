@@ -42,14 +42,15 @@ def teatmik_company_url(query: str) -> str | None:
     """Deep link to a Teatmik search/detail page.
 
     Numeric input → direct personlegal page (registry code).
-    Otherwise → search query.
+    Otherwise → search query (path-style: `/et/search/<query>`,
+    NOT `?query=…`).
     """
     q = (query or "").strip()
     if not q:
         return None
     if q.isdigit() and 7 <= len(q) <= 9:
         return f"https://www.teatmik.ee/et/personlegal/{q}"
-    return f"https://www.teatmik.ee/et/search?query={quote(q)}"
+    return f"https://www.teatmik.ee/et/search/{quote(q)}"
 
 
 __all__ = ["ehr_building_url", "teatmik_company_url"]

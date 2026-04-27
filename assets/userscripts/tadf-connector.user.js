@@ -1,15 +1,12 @@
 // ==UserScript==
 // @name         TADF Connector
 // @namespace    https://github.com/sapsan14/tadf-audit
-// @version      0.2.0
+// @version      0.3.0
 // @description  Шлёт данные из EHR.ee и Teatmik.ee в открытый аудит TADF (без копипастов).
 // @author       Anton Sokolov / Fjodor Sokolov
-// @match        https://livekluster.ehr.ee/ui/ehr/v1/buildings/*
-// @match        https://livekluster.ehr.ee/ui/ehr/v1/objects/*
-// @match        https://www.teatmik.ee/et/personlegal/*
-// @match        https://www.teatmik.ee/en/personlegal/*
-// @match        https://teatmik.ee/et/personlegal/*
-// @match        https://teatmik.ee/en/personlegal/*
+// @match        https://livekluster.ehr.ee/*
+// @match        https://www.teatmik.ee/*
+// @match        https://teatmik.ee/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_notification
 // @connect      tadf-audit.h2oatlas.ee
@@ -22,9 +19,15 @@
  *
  * Auth model: TADF generates a short-lived per-audit HMAC token when the
  * auditor clicks "🔎 Открыть в EHR / Teatmik" and embeds it in the URL
- * fragment (#tadf=<audit_id>:<expiry>:<sig>). This script reads it,
- * fetches the page data via the auditor's existing browser session, and
- * POSTs it to TADF's /api endpoint. No cookies leave the browser.
+ * fragment (#tadf=<audit_id>:<expiry>:<sig>).
+ *
+ * The token survives in-site navigation (search page → company detail
+ * page) via origin-scoped localStorage with a 24h TTL — same window as
+ * the token's own expiry. Without this, clicking on a search result
+ * would lose the fragment and the helper would have nothing to report.
+ *
+ * No cookies leave the browser. Only the page's own JSON / scraped DOM
+ * is sent, plus the bearer token for auth.
  */
 
 (function () {
@@ -32,13 +35,13 @@
 
     const TADF_BASE = 'https://tadf-audit.h2oatlas.ee';
     const HASH_KEY = 'tadf';
+    const LS_KEY = 'tadf_connector_token';
+    const LS_TTL_MS = 24 * 3600 * 1000;
 
-    // ---- helpers -----------------------------------------------------------
+    // ---- token plumbing ---------------------------------------------------
 
-    function readToken() {
-        // Format in URL fragment: #tadf=<audit_id>:<expiry>:<sig>
-        // Multiple fragments separated by `&` are tolerated.
-        const hash = window.location.hash.replace(/^#/, '');
+    function readTokenFromHash() {
+        const hash = (window.location.hash || '').replace(/^#/, '');
         for (const part of hash.split('&')) {
             const [k, v] = part.split('=');
             if (k === HASH_KEY && v) {
@@ -52,10 +55,58 @@
         return null;
     }
 
+    function saveToken(ctx) {
+        try {
+            localStorage.setItem(LS_KEY, JSON.stringify({
+                ...ctx,
+                savedAt: Date.now(),
+            }));
+        } catch (e) {
+            console.warn('[TADF] could not save token to localStorage:', e);
+        }
+    }
+
+    function readTokenFromStorage() {
+        try {
+            const raw = localStorage.getItem(LS_KEY);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            if (!data.savedAt || Date.now() - data.savedAt > LS_TTL_MS) {
+                localStorage.removeItem(LS_KEY);
+                return null;
+            }
+            return { auditId: data.auditId, token: data.token };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getToken() {
+        // Fragment wins over storage (newer URL = newer audit / refreshed token).
+        const fromHash = readTokenFromHash();
+        if (fromHash) {
+            saveToken(fromHash);
+            return fromHash;
+        }
+        return readTokenFromStorage();
+    }
+
+    // Always capture the token on first arrival, even if we don't extract
+    // anything on this page yet (search pages, login pages, etc).
+    const incomingToken = readTokenFromHash();
+    if (incomingToken) {
+        saveToken(incomingToken);
+    }
+
+    // ---- POST to TADF ------------------------------------------------------
+
     function postToTadf(path, payload) {
-        const ctx = readToken();
+        const ctx = getToken();
         if (!ctx) {
-            console.log('[TADF Connector] no token in URL fragment — открой страницу из TADF, не вручную');
+            showOverlay(
+                '⚠️ TADF token не найден. Открой страницу из кнопки в TADF, не вручную.',
+                'error'
+            );
             return;
         }
         GM_xmlhttpRequest({
@@ -70,29 +121,29 @@
             timeout: 15000,
             onload: function (resp) {
                 if (resp.status >= 200 && resp.status < 300) {
-                    showOverlay('✅ Отправлено в TADF', 'success');
+                    showOverlay(`✅ Отправлено в TADF (аудит #${ctx.auditId})`, 'success');
                     if (typeof GM_notification === 'function') {
                         GM_notification({
-                            text: 'Данные отправлены в TADF — переключитесь на вкладку.',
+                            text: 'Данные отправлены в TADF — переключись на вкладку.',
                             title: 'TADF Connector',
                             timeout: 4000,
                         });
                     }
+                } else if (resp.status === 401) {
+                    showOverlay('❌ TADF токен истёк — открой страницу из TADF заново', 'error');
                 } else {
-                    showOverlay('❌ TADF: ' + resp.status + ' ' + resp.responseText.slice(0, 200), 'error');
+                    showOverlay(
+                        '❌ TADF: ' + resp.status + ' ' + (resp.responseText || '').slice(0, 200),
+                        'error'
+                    );
                 }
             },
-            onerror: function () {
-                showOverlay('❌ TADF недоступен — проверь сеть', 'error');
-            },
-            ontimeout: function () {
-                showOverlay('❌ TADF таймаут (15 с)', 'error');
-            },
+            onerror: function () { showOverlay('❌ TADF недоступен — проверь сеть', 'error'); },
+            ontimeout: function () { showOverlay('❌ TADF таймаут (15 с)', 'error'); },
         });
     }
 
     function showOverlay(text, kind) {
-        // Remove old overlay first
         const old = document.getElementById('tadf-connector-overlay');
         if (old) old.remove();
         const div = document.createElement('div');
@@ -108,54 +159,49 @@
             fontSize: '14px',
             fontFamily: 'system-ui, sans-serif',
             color: 'white',
-            backgroundColor: kind === 'success' ? '#16a34a' : '#dc2626',
+            backgroundColor: kind === 'success' ? '#16a34a' : kind === 'info' ? '#2563eb' : '#dc2626',
             boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
             cursor: 'pointer',
+            maxWidth: '360px',
+            lineHeight: '1.4',
         });
         div.addEventListener('click', () => div.remove());
         document.body.appendChild(div);
-        // Auto-dismiss success overlays after 5 s
-        if (kind === 'success') {
-            setTimeout(() => div.remove(), 5000);
+        if (kind === 'success' || kind === 'info') {
+            setTimeout(() => div.remove(), 6000);
         }
     }
 
     // ---- EHR ---------------------------------------------------------------
 
     function handleEhr() {
-        // Pull the EHR-code out of the URL: /ui/ehr/v1/buildings/<code>
-        const m = window.location.pathname.match(/buildings\/(\d+)/);
-        if (!m) return;
+        const m = window.location.pathname.match(/buildings\/(\d+)/) ||
+                  window.location.pathname.match(/objects\/(\d+)/);
+        if (!m) return;  // not a building page — nothing to do
         const ehrCode = m[1];
+        if (!getToken()) return;  // no audit context — silent
 
-        // The SPA already has the building object cached after page load —
-        // we re-fetch through the same authed session to get a clean JSON
-        // payload independent of the rendered DOM.
         fetch(`/api/building/v3/${ehrCode}`, {
             credentials: 'include',
             headers: { 'Accept': 'application/json' },
         })
             .then(r => r.ok ? r.json() : Promise.reject('EHR API ' + r.status))
-            .then(data => {
-                postToTadf('/api/import-ehr', { ehr_code: ehrCode, ...data });
-            })
+            .then(data => postToTadf('/api/import-ehr', { ehr_code: ehrCode, ...data }))
             .catch(err => {
-                // Fall back to scraping the DOM if the API path moved.
-                console.warn('[TADF Connector] EHR API fetch failed, falling back to DOM:', err);
+                console.warn('[TADF] EHR API fetch failed, falling back to DOM:', err);
                 postToTadf('/api/import-ehr', scrapeEhrDom(ehrCode));
             });
     }
 
     function scrapeEhrDom(ehrCode) {
-        // Lightweight DOM fallback — collect any obvious labelled values.
         const out = { ehr_code: ehrCode, _source: 'dom' };
         document.querySelectorAll('dt, .label, th').forEach(el => {
             const label = (el.textContent || '').trim().toLowerCase();
             const value = (el.nextElementSibling?.textContent || '').trim();
             if (!value) return;
-            if (label.includes('aadress') || label.includes('адрес')) out.address = value;
+            if (label.includes('aadress')) out.address = value;
             if (label.includes('katastr')) out.kataster_no = value;
-            if (label.includes('ehitisaasta') || label.includes('год')) out.construction_year = value;
+            if (label.includes('ehitisaasta')) out.construction_year = value;
             if (label.includes('kasutus') && label.includes('otsta')) out.use_purpose = value;
         });
         return out;
@@ -164,17 +210,23 @@
     // ---- Teatmik -----------------------------------------------------------
 
     function handleTeatmik() {
-        // /et/personlegal/<reg_code>
+        // /et/personlegal/<digits>[-slug] OR /en/personlegal/<digits>[-slug]
         const m = window.location.pathname.match(/personlegal\/(\d+)/);
-        if (!m) return;
-        const regCode = m[1];
+        if (!m) {
+            // Search page or anything else — show a hint banner if there's
+            // a token in storage so the user knows to click a result.
+            if (window.location.pathname.includes('/search') && getToken()) {
+                showOverlay('🔎 TADF: выбери компанию в результатах — данные отправятся автоматически.', 'info');
+            }
+            return;
+        }
+        if (!getToken()) return;
 
-        // The page is HTML-rendered after CAPTCHA — DOM is the source of truth.
         const out = {
-            reg_code: regCode,
-            name: scrapeText(['h1', 'h2', '.company-name']),
+            reg_code: m[1],
+            name: scrapeText(['h1', 'h2', '.company-name', '[data-testid="company-name"]']),
             address: scrapeLabelled(['aadress', 'адрес']),
-            status: scrapeLabelled(['staatus', 'статус']),
+            status: scrapeLabelled(['staatus', 'статус', 'state']),
         };
         postToTadf('/api/import-teatmik', out);
     }
@@ -204,7 +256,7 @@
     // ---- entry point -------------------------------------------------------
 
     if (window.location.hostname.includes('ehr.ee')) {
-        // Wait briefly for the SPA to populate cookies / state.
+        // SPA — wait briefly for content to render after route change.
         setTimeout(handleEhr, 1500);
     } else if (window.location.hostname.includes('teatmik.ee')) {
         handleTeatmik();
