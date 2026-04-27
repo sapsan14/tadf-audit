@@ -15,7 +15,7 @@ from app._state import get_current  # noqa: E402
 from tadf.config import AUDITS_DIR  # noqa: E402
 from tadf.db.repo import upsert_audit  # noqa: E402
 from tadf.db.session import session_scope  # noqa: E402
-from tadf.legal.checklist import check  # noqa: E402
+from tadf.legal.checklist import check, soft_warnings  # noqa: E402
 from tadf.render.docx_render import ChecklistFailed, render_to_path  # noqa: E402
 
 st.title("Готовый отчёт")
@@ -27,10 +27,52 @@ missing = check(audit)
 if not missing:
     st.success("✅ Все обязательные поля заполнены — отчёт готов к рендеру.")
 else:
+    # Map missing-item field → page to jump to. Streamlit needs the path
+    # exactly as registered in app/main.py.
+    _PAGE_FOR_FIELD = {
+        "audit.purpose": "pages/1_📝_Новый_аудит.py",
+        "audit.scope": "pages/1_📝_Новый_аудит.py",
+        "audit.visit_date": "pages/1_📝_Новый_аудит.py",
+        "reviewer.full_name": "pages/1_📝_Новый_аудит.py",
+        "reviewer.kutsetunnistus_no": "pages/1_📝_Новый_аудит.py",
+        "composer.full_name": "pages/1_📝_Новый_аудит.py",
+        "building.address": "pages/2_🏠_Здание.py",
+        "building.kataster_no | ehr_code": "pages/2_🏠_Здание.py",
+        "building.construction_year": "pages/2_🏠_Здание.py",
+        "building.footprint_m2": "pages/2_🏠_Здание.py",
+        "findings[section=11]": "pages/3_🔍_Наблюдения.py",
+        "findings[section=14]": "pages/3_🔍_Наблюдения.py",
+        "findings[section=8]": "pages/3_🔍_Наблюдения.py",
+    }
     st.error(f"❌ Не заполнено {len(missing)} обязательных пункт(ов):")
-    for m in missing:
+    for idx, m in enumerate(missing):
         with st.container(border=True):
-            st.markdown(f"**`{m.field}`** → форма «{m.section_hint}»  \n🇪🇪 {m.why_et}  \n🇷🇺 {m.why_ru}")
+            mc1, mc2 = st.columns([5, 1])
+            mc1.markdown(
+                f"**`{m.field}`** → форма «{m.section_hint}»  \n"
+                f"🇪🇪 {m.why_et}  \n🇷🇺 {m.why_ru}"
+            )
+            target = _PAGE_FOR_FIELD.get(m.field)
+            if target and mc2.button(
+                "→ Заполнить",
+                key=f"jump_missing_{idx}",
+                use_container_width=True,
+                help=f"Перейти на «{m.section_hint}» и заполнить.",
+            ):
+                st.switch_page(target)
+
+# Soft quality warnings — don't block render but flag things that would
+# weaken the report at the EHR review (e.g. "major non-conformance" without
+# any cited norm).
+warnings = soft_warnings(audit)
+if warnings:
+    with st.container(border=True):
+        st.warning(
+            f"⚠️ Качество отчёта: {len(warnings)} замечани(е/я). "
+            "Не блокирует сборку, но рецензент EHR может задать вопрос."
+        )
+        for w in warnings:
+            st.markdown(f"- **`{w.field}`** — {w.why_ru}")
 
 st.header("Сохранить и собрать .docx")
 

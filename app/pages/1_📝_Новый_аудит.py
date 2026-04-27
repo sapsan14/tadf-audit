@@ -13,6 +13,7 @@ import streamlit as st  # noqa: E402
 
 from app._state import (  # noqa: E402
     all_saved_drafts,
+    clone_as_new_draft,
     delete_audit_by_id,
     ensure_draft_saved,
     get_current,
@@ -65,7 +66,7 @@ with st.container(border=True):
         for d in drafts:
             is_current = d.id == loaded_id
             with st.container(border=is_current):
-                cc1, cc2, cc3, cc4 = st.columns([5, 2, 1, 1])
+                cc1, cc2, cc3, cc4, cc5 = st.columns([5, 2, 1, 1, 1])
                 addr = (d.building.address or "").strip() or "(адрес не введён)"
                 updated = d.updated_at.strftime("%Y-%m-%d %H:%M") if d.updated_at else "—"
                 cc1.markdown(
@@ -89,9 +90,24 @@ with st.container(border=True):
                         reload_from_db(d.id)
                         st.rerun()
 
+                if cc4.button(
+                    "📑",
+                    key=f"draft_clone_{d.id}",
+                    help=(
+                        "Клонировать как новый черновик: "
+                        "сохраняются аудиторы, тип и подтип, методология; "
+                        "сбрасываются адрес/EHR/кадастр, заказчик, наблюдения, "
+                        "фото, дата осмотра."
+                    ),
+                    use_container_width=True,
+                ):
+                    clone_as_new_draft(d.id)
+                    st.success(f"Черновик клонирован из #{d.id}")
+                    st.rerun()
+
                 pending_key = f"_draft_del_confirm_{d.id}"
                 if st.session_state.get(pending_key):
-                    if cc4.button(
+                    if cc5.button(
                         "✓",
                         key=f"draft_del_ok_{d.id}",
                         type="primary",
@@ -110,7 +126,7 @@ with st.container(border=True):
                         st.session_state.pop(pending_key, None)
                         st.rerun()
                 else:
-                    if cc4.button(
+                    if cc5.button(
                         "🗑️",
                         key=f"draft_del_{d.id}",
                         help="Удалить черновик (с подтверждением)",
