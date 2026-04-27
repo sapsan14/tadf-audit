@@ -303,6 +303,11 @@ st.caption(
 )
 
 col1, col2 = st.columns(2)
+# Both auditor blocks render the SAME 5 fields in the SAME order so the
+# rows line up horizontally between «Auditi koostas» and «Auditi
+# kontrollis». A composer typically has empty Kutsetunnistus; a reviewer
+# typically has empty Reg. nr (same firm as composer) — that's fine,
+# the layout stays symmetric.
 with col1:
     st.subheader("Auditi koostas")
     st.caption("Инженер, который физически готовит отчёт. Может совпадать с проверяющим.")
@@ -314,12 +319,24 @@ with col1:
             key=k("composer_name"),
             help="ФИО составителя. Подсказки — из прошлых аудитов.",
         ) or "",
+        kutsetunnistus_no=st.text_input(
+            "Kutsetunnistus №",
+            value=audit.composer.kutsetunnistus_no or "",
+            key=k("composer_kut"),
+            help="Если у составителя нет kutsetunnistus — оставьте пустым.",
+        ) or None,
+        qualification=st.text_input(
+            "Квалификация",
+            value=audit.composer.qualification or "",
+            key=k("composer_qual"),
+            help="Например «Diplomeeritud ehitusinsener tase 7».",
+        ) or None,
         company=combobox(
             "Компания",
             suggestions=composer_companies(),
             value=audit.composer.company,
             key=k("composer_company"),
-            help="Юр. лицо составителя (например TADF Ehitus OÜ или UNTWERP OÜ).",
+            help="Юр. лицо составителя (например TADF Ehitus OÜ).",
         ),
         company_reg_nr=(
             _composer_reg := st.text_input(
@@ -328,12 +345,6 @@ with col1:
                 key=k("composer_reg"),
                 help="Регистрационный код компании составителя (8 цифр для OÜ).",
             )
-        ) or None,
-        qualification=st.text_input(
-            "Квалификация",
-            value=audit.composer.qualification or "",
-            key=k("composer_qual"),
-            help="Например «Diplomeeritud ehitusinsener tase 7».",
         ) or None,
     )
     hint_caption(reg_code_hint(_composer_reg))
@@ -371,7 +382,16 @@ with col2:
             value=audit.reviewer.company or "TADF Ehitus OÜ",
             key=k("reviewer_company"),
         ),
+        company_reg_nr=(
+            _reviewer_reg := st.text_input(
+                "Reg. nr",
+                value=audit.reviewer.company_reg_nr or "",
+                key=k("reviewer_reg"),
+                help="Если совпадает с компанией составителя — оставьте пустым.",
+            )
+        ) or None,
     )
+    hint_caption(reg_code_hint(_reviewer_reg))
 
 st.header("Заказчик (Tellija)")
 st.caption("Лицо или организация, заказавшая аудит. Указывается на титульном листе.")
