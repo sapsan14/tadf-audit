@@ -85,76 +85,88 @@ if _PENDING_KEY in st.session_state:
 # (EHR no longer goes through here — we hit the public ehr.ee API directly
 # from Hetzner via tadf.external.ehr_client.lookup_ehr; see the dedicated
 # "Подгрузить из EHR" button below the EHR-code field.)
+#
+# Wrapped in @st.fragment(run_every="5s") so the browser re-polls the
+# pending_import table every 5 seconds independently of user interaction.
+# Without this, returning to TADF after the bookmarklet POSTs an import
+# wouldn't show the new row until the auditor clicks something else.
+# Apply uses st.rerun(scope="app") so the pending block at the top of
+# the script runs and re-seeds the building widgets.
 # ---------------------------------------------------------------------------
-if audit.id is not None:
+
+
+@st.fragment(run_every="5s")
+def _render_pending_teatmik_imports() -> None:
+    if audit.id is None:
+        return
     _imports = list_pending(audit.id)
     for imp in _imports:
-        if imp.kind == "teatmik":
-            # target=client imports surface on the Новый аудит page where
-            # the client form lives; here we handle designer / builder /
-            # no-hint imports.
-            if imp.payload.get("target") == "client":
-                continue
-            mapped = map_teatmik(imp.payload)
-            # The browser helper passes `target` based on which TADF form
-            # section the auditor was on (designer / builder / client).
-            # We default the picker to the hint and pre-fill the entire
-            # contact bundle on apply when target=client.
-            hinted_target = mapped.pop("target", None)
-            with st.container(border=True):
-                st.markdown(
-                    f"📥 **Импорт из Teatmik** — получено "
-                    f"{imp.received_at.strftime('%H:%M:%S')}"
-                    + (f" → **{hinted_target}**" if hinted_target else "")
-                )
-                if imp.source_url:
-                    st.caption(f"Источник: {imp.source_url}")
-                if not mapped:
-                    st.warning("Пустая карточка компании (нет полезных полей).")
-                else:
-                    st.write("Найдено:")
-                    for kfield, val in mapped.items():
-                        st.write(f"- `{kfield}`: {val}")
+        if imp.kind != "teatmik":
+            continue
+        # target=client imports surface on the Новый аудит page where
+        # the client form lives; here we handle designer / builder /
+        # no-hint imports.
+        if imp.payload.get("target") == "client":
+            continue
+        mapped = map_teatmik(imp.payload)
+        hinted_target = mapped.pop("target", None)
+        with st.container(border=True):
+            st.markdown(
+                f"📥 **Импорт из Teatmik** — получено "
+                f"{imp.received_at.strftime('%H:%M:%S')}"
+                + (f" → **{hinted_target}**" if hinted_target else "")
+            )
+            if imp.source_url:
+                st.caption(f"Источник: {imp.source_url}")
+            if not mapped:
+                st.warning("Пустая карточка компании (нет полезных полей).")
+            else:
+                st.write("Найдено:")
+                for kfield, val in mapped.items():
+                    st.write(f"- `{kfield}`: {val}")
 
-                target_options = ["designer", "builder", "client"]
-                default_target = (
-                    hinted_target if hinted_target in target_options else "designer"
-                )
-                tc1, tc2, _tc3, tc4 = st.columns(4)
-                target = tc1.selectbox(
-                    "Куда вставить",
-                    options=target_options,
-                    index=target_options.index(default_target),
-                    key=f"imp_tm_target_{imp.id}",
-                    label_visibility="collapsed",
-                )
-                if tc2.button("✅ Применить", type="primary", key=f"imp_tm_apply_{imp.id}"):
-                    name = mapped.get("name") or mapped.get("reg_code")
-                    if target == "designer":
-                        st.session_state[_PENDING_KEY] = {"designer": name}
-                    elif target == "builder":
-                        st.session_state[_PENDING_KEY] = {"builder": name}
-                    elif target == "client":
-                        if audit.client is None:
-                            from tadf.models import Client
+            target_options = ["designer", "builder", "client"]
+            default_target = (
+                hinted_target if hinted_target in target_options else "designer"
+            )
+            tc1, tc2, _tc3, tc4 = st.columns(4)
+            target = tc1.selectbox(
+                "Куда вставить",
+                options=target_options,
+                index=target_options.index(default_target),
+                key=f"imp_tm_target_{imp.id}",
+                label_visibility="collapsed",
+            )
+            if tc2.button("✅ Применить", type="primary", key=f"imp_tm_apply_{imp.id}"):
+                name = mapped.get("name") or mapped.get("reg_code")
+                if target == "designer":
+                    st.session_state[_PENDING_KEY] = {"designer": name}
+                elif target == "builder":
+                    st.session_state[_PENDING_KEY] = {"builder": name}
+                elif target == "client":
+                    if audit.client is None:
+                        from tadf.models import Client
 
-                            audit.client = Client(name=name or "")
-                        else:
-                            audit.client.name = name or ""
-                        if mapped.get("reg_code"):
-                            audit.client.reg_code = mapped["reg_code"]
-                        if mapped.get("address"):
-                            audit.client.address = mapped["address"]
-                        if mapped.get("email"):
-                            audit.client.contact_email = mapped["email"]
-                        if mapped.get("phone"):
-                            audit.client.contact_phone = mapped["phone"]
-                        set_current(audit)
-                    mark_applied(imp.id)
-                    st.rerun()
-                if tc4.button("❌ Отклонить", key=f"imp_tm_reject_{imp.id}"):
-                    mark_rejected(imp.id)
-                    st.rerun()
+                        audit.client = Client(name=name or "")
+                    else:
+                        audit.client.name = name or ""
+                    if mapped.get("reg_code"):
+                        audit.client.reg_code = mapped["reg_code"]
+                    if mapped.get("address"):
+                        audit.client.address = mapped["address"]
+                    if mapped.get("email"):
+                        audit.client.contact_email = mapped["email"]
+                    if mapped.get("phone"):
+                        audit.client.contact_phone = mapped["phone"]
+                    set_current(audit)
+                mark_applied(imp.id)
+                st.rerun(scope="app")
+            if tc4.button("❌ Отклонить", key=f"imp_tm_reject_{imp.id}"):
+                mark_rejected(imp.id)
+                st.rerun(scope="app")
+
+
+_render_pending_teatmik_imports()
 
 
 # ---------------------------------------------------------------------------
