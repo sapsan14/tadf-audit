@@ -138,6 +138,22 @@ def _row_to_photo(r: PhotoRow) -> Photo:
     )
 
 
+def _filled_field_count(a: Auditor) -> int:
+    """How many of the meaningful sibling fields are populated. Used as a
+    tie-breaker when composer and reviewer share `full_name`."""
+    return sum(
+        1
+        for v in (
+            _strip_or_none(a.kutsetunnistus_no),
+            _strip_or_none(a.qualification),
+            _strip_or_none(a.company),
+            _strip_or_none(a.company_reg_nr),
+            _strip_or_none(a.id_code),
+        )
+        if v is not None
+    )
+
+
 def _mirror_to_directory(s: Session, audit: Audit) -> None:
     """Mirror the named entities of `audit` into the directory tables.
 
@@ -145,9 +161,34 @@ def _mirror_to_directory(s: Session, audit: Audit) -> None:
     keyed by name so the same person/company/value reuses one directory
     row. Empty-named entities are ignored (we don't want a "" entry in
     the dropdown).
+
+    Collision handling: when `composer.full_name == reviewer.full_name`
+    (case-insensitive after trim), the directory has only one slot for
+    this person — writing both rows back-to-back would have the second
+    write silently overwrite the first. Pick the side with MORE
+    populated sibling fields and mirror only that one (tie → reviewer,
+    matching the prior behaviour). Combined with `_set_if_present` in
+    the upsert helpers, this means data the auditor typed in either
+    role is preserved instead of being wiped by an empty counterpart.
     """
-    upsert_directory_auditor(s, audit.composer)
-    upsert_directory_auditor(s, audit.reviewer)
+    composer = audit.composer
+    reviewer = audit.reviewer
+    composer_name = _strip_or_none(composer.full_name)
+    reviewer_name = _strip_or_none(reviewer.full_name)
+    if (
+        composer_name is not None
+        and reviewer_name is not None
+        and composer_name.casefold() == reviewer_name.casefold()
+    ):
+        # Same person on both sides — pick the more-populated one.
+        if _filled_field_count(composer) > _filled_field_count(reviewer):
+            upsert_directory_auditor(s, composer)
+        else:
+            upsert_directory_auditor(s, reviewer)
+    else:
+        upsert_directory_auditor(s, composer)
+        upsert_directory_auditor(s, reviewer)
+
     if audit.client is not None:
         upsert_directory_client(s, audit.client)
     if audit.building is not None:
@@ -359,6 +400,25 @@ def _strip_or_none(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _set_if_present(row, attr: str, value) -> None:
+    """Update `row.<attr>` only when `value` is non-None.
+
+    Audit forms have many fields that the auditor may legitimately leave
+    empty (kutsetunnistus on a junior composer; reg_code on a private-
+    person client; …). Without this guard, mirroring an audit save with
+    a blanked field would WIPE OUT the directory entry's previously-
+    populated value — losing data the auditor explicitly typed in earlier
+    audits or in the «🗂 Справочник» edit form. Accumulate via repeated
+    saves; the explicit cleanup channel is the «🗂 Справочник» row's
+    edit form (which uses `update_directory_*` and DOES allow setting
+    a field back to None).
+    """
+    cleaned = _strip_or_none(value) if isinstance(value, str) else value
+    if cleaned is None:
+        return
+    setattr(row, attr, cleaned)
+
+
 def upsert_directory_auditor(s: Session, src: Auditor) -> None:
     name = _strip_or_none(src.full_name)
     if name is None:
@@ -367,13 +427,13 @@ def upsert_directory_auditor(s: Session, src: Auditor) -> None:
     if row is None:
         row = DirectoryAuditorRow(full_name=name)
         s.add(row)
-    row.company = _strip_or_none(src.company)
-    row.company_reg_nr = _strip_or_none(src.company_reg_nr)
-    row.kutsetunnistus_no = _strip_or_none(src.kutsetunnistus_no)
-    row.qualification = _strip_or_none(src.qualification)
-    row.id_code = _strip_or_none(src.id_code)
-    row.independence_declaration = src.independence_declaration
-    row.signature_image_path = src.signature_image_path
+    _set_if_present(row, "company", src.company)
+    _set_if_present(row, "company_reg_nr", src.company_reg_nr)
+    _set_if_present(row, "kutsetunnistus_no", src.kutsetunnistus_no)
+    _set_if_present(row, "qualification", src.qualification)
+    _set_if_present(row, "id_code", src.id_code)
+    _set_if_present(row, "independence_declaration", src.independence_declaration)
+    _set_if_present(row, "signature_image_path", src.signature_image_path)
     s.flush()
 
 
@@ -385,10 +445,10 @@ def upsert_directory_client(s: Session, src: Client) -> None:
     if row is None:
         row = DirectoryClientRow(name=name)
         s.add(row)
-    row.reg_code = _strip_or_none(src.reg_code)
-    row.contact_email = _strip_or_none(src.contact_email)
-    row.contact_phone = _strip_or_none(src.contact_phone)
-    row.address = _strip_or_none(src.address)
+    _set_if_present(row, "reg_code", src.reg_code)
+    _set_if_present(row, "contact_email", src.contact_email)
+    _set_if_present(row, "contact_phone", src.contact_phone)
+    _set_if_present(row, "address", src.address)
     s.flush()
 
 

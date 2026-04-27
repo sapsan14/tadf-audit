@@ -143,6 +143,60 @@ def test_upsert_directory_client_idempotent(db_engine):
     assert len(rows) == 1 and rows[0].reg_code == "222"
 
 
+def test_upsert_does_not_blank_existing_fields_with_none(db_engine):
+    """Directory accumulates data: subsequent upserts that omit a field
+    must preserve the previously-populated value. Without this, opening
+    an old audit (which has a partially-filled auditor) and re-saving
+    would silently wipe whatever the user typed in the «🗂 Справочник»
+    edit form (or in a different audit)."""
+    with Session(db_engine) as s:
+        upsert_directory_auditor(
+            s,
+            Auditor(
+                full_name="Anton",
+                kutsetunnistus_no="111",
+                qualification="Diplomeeritud",
+                company="Acme OÜ",
+                company_reg_nr="12345678",
+            ),
+        )
+        s.commit()
+    # Re-upsert with only the name + a new company — other fields None.
+    with Session(db_engine) as s:
+        upsert_directory_auditor(s, Auditor(full_name="Anton", company="New Co"))
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryAuditorRow).one()
+        assert row.full_name == "Anton"
+        assert row.company == "New Co"  # explicitly set → updated
+        assert row.kutsetunnistus_no == "111"  # PRESERVED
+        assert row.qualification == "Diplomeeritud"  # PRESERVED
+        assert row.company_reg_nr == "12345678"  # PRESERVED
+
+
+def test_upsert_client_does_not_blank_with_none(db_engine):
+    with Session(db_engine) as s:
+        upsert_directory_client(
+            s,
+            Client(
+                name="Acme",
+                reg_code="111",
+                contact_email="a@example.com",
+                address="Tartu mnt 84a",
+            ),
+        )
+        s.commit()
+    with Session(db_engine) as s:
+        upsert_directory_client(s, Client(name="Acme", contact_phone="+372 555 0000"))
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryClientRow).one()
+        assert row.reg_code == "111"  # preserved
+        assert row.contact_email == "a@example.com"  # preserved
+        assert row.address == "Tartu mnt 84a"  # preserved
+        assert row.contact_phone == "+372 555 0000"  # newly added
+
+
 def test_upsert_simple_designer_idempotent(db_engine):
     with Session(db_engine) as s:
         upsert_directory_designer(s, "Bureau OÜ")
@@ -200,6 +254,84 @@ def test_delete_round_trips_for_every_directory(
 # ---------------------------------------------------------------------------
 # save_audit / upsert_audit auto-mirror
 # ---------------------------------------------------------------------------
+
+def test_mirror_picks_more_complete_record_when_composer_reviewer_share_name(db_engine):
+    """Real-world bug: the user typed «Anton Sokolov» in BOTH composer
+    (with kutsetunnistus 000000 + company Anthemion) and reviewer (with
+    kutsetunnistus 148515 + company TADF Ehitus OÜ). The directory ended
+    up with reviewer's data because both upserts ran and the second
+    silently overwrote the first.
+
+    Fix: detect the same-name collision in `_mirror_to_directory` and
+    keep only the side with more populated sibling fields.
+    """
+    audit = _build_minimal_audit()
+    # Composer: 5 filled fields (kutsetunnistus, qual, company, reg_nr, id_code).
+    audit.composer = Auditor(
+        full_name="Anton Sokolov",
+        kutsetunnistus_no="000000",
+        qualification="Diplomeeritud insener tase 7",
+        company="Anthemion",
+        company_reg_nr="00000000",
+        id_code="38001011234",
+    )
+    # Reviewer: 3 filled fields.
+    audit.reviewer = Auditor(
+        full_name="Anton Sokolov",
+        kutsetunnistus_no="148515",
+        qualification="Diplomeeritud insener tase 7",
+        company="TADF Ehitus OÜ",
+    )
+    with Session(db_engine) as s:
+        save_audit(s, audit)
+        s.commit()
+    with Session(db_engine) as s:
+        rows = s.query(DirectoryAuditorRow).all()
+        assert len(rows) == 1, "exactly one Anton Sokolov record (no collision)"
+        anton = rows[0]
+        # Composer has more filled fields → composer's data wins.
+        assert anton.kutsetunnistus_no == "000000"
+        assert anton.company == "Anthemion"
+        assert anton.company_reg_nr == "00000000"
+        assert anton.id_code == "38001011234"
+
+
+def test_mirror_picks_reviewer_when_collision_and_reviewer_more_complete(db_engine):
+    audit = _build_minimal_audit()
+    audit.composer = Auditor(full_name="Boris", company="Just Co")  # 1 sibling field
+    audit.reviewer = Auditor(
+        full_name="Boris",
+        kutsetunnistus_no="999",
+        qualification="Diplomeeritud",
+        company="Real OÜ",
+        company_reg_nr="11111111",
+    )  # 4 sibling fields
+    with Session(db_engine) as s:
+        save_audit(s, audit)
+        s.commit()
+    with Session(db_engine) as s:
+        rows = s.query(DirectoryAuditorRow).all()
+        assert len(rows) == 1
+        boris = rows[0]
+        assert boris.kutsetunnistus_no == "999"
+        assert boris.company == "Real OÜ"
+        assert boris.company_reg_nr == "11111111"
+
+
+def test_mirror_keeps_distinct_records_when_names_differ(db_engine):
+    """Different names → both entries kept (the original behaviour)."""
+    audit = _build_minimal_audit()
+    audit.composer = Auditor(full_name="Anna", kutsetunnistus_no="111")
+    audit.reviewer = Auditor(full_name="Boris", kutsetunnistus_no="222")
+    with Session(db_engine) as s:
+        save_audit(s, audit)
+        s.commit()
+    with Session(db_engine) as s:
+        rows = {r.full_name: r for r in s.query(DirectoryAuditorRow).all()}
+        assert set(rows) == {"Anna", "Boris"}
+        assert rows["Anna"].kutsetunnistus_no == "111"
+        assert rows["Boris"].kutsetunnistus_no == "222"
+
 
 def test_save_audit_mirrors_to_all_directories(db_engine):
     audit = _build_minimal_audit()
