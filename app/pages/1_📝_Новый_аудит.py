@@ -310,7 +310,13 @@ col1, col2 = st.columns(2)
 # the layout stays symmetric.
 with col1:
     st.subheader("Auditi koostas")
-    st.caption("Инженер, который физически готовит отчёт. Может совпадать с проверяющим.")
+    # Two lines so this caption matches the height of the right-hand
+    # «kontrollis» caption — without padding, the form fields below
+    # start at different baselines and the columns look misaligned.
+    st.caption(
+        "Инженер, который физически готовит отчёт. "
+        "Может совпадать с проверяющим (тогда продублируйте поля справа)."
+    )
     audit.composer = Auditor(
         full_name=combobox(
             "Имя",
@@ -500,7 +506,14 @@ company_picker(
 # attention but stays one click away if Ariregister ever fails.
 if feature_flags.teatmik_enabled():
     with st.expander("🌐 Альтернативный источник: Teatmik (резерв)", expanded=False):
-        _tk_query = (audit.client.reg_code or audit.client.name or "").strip()
+        # Single search query: prefer (in order) the Ariregister picker's
+        # typed text, the client model's reg_code, then client name. So
+        # the auditor doesn't have to retype "TADF" twice.
+        _tk_query = (
+            (st.session_state.get(f"_co_q_client_{scope}") or "").strip()
+            or (audit.client.reg_code or "").strip()
+            or (audit.client.name or "").strip()
+        )
         _tk_link = teatmik_company_url(_tk_query) if _tk_query else None
         if _tk_link:
             if audit.id is not None:
@@ -517,8 +530,8 @@ if feature_flags.teatmik_enabled():
                 disabled=True,
                 key=f"teatmik_client_disabled_{scope}",
                 help=(
-                    "Введите название заказчика или его рег-код выше — "
-                    "ссылка на Teatmik активируется."
+                    "Введите название/рег-код заказчика в поле выше "
+                    "(Ariregister) — ссылка на Teatmik активируется автоматически."
                 ),
             )
         st.caption(
