@@ -1,0 +1,113 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            713103.86,
+            6589044.64
+          ],
+          [
+            713104.01,
+            6589040.74
+          ],
+          [
+            713107.18,
+            6589040.86
+          ],
+          [
+            713106.7,
+            6589053.67
+          ],
+          [
+            713103.53,
+            6589053.55
+          ],
+          [
+            713097.41,
+            6589053.32
+          ],
+          [
+            713097.74,
+            6589044.41
+          ],
+          [
+            713103.86,
+            6589044.64
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "object_type": "EHR_KOOD",
+      "object_code": "102032773",
+      "object_address": "Ida-Viru maakond, Sillamäe linn, Linna AÜ 1062",
+      "object_name": "Suvila",
+      "ads_oid": "EE00685427",
+      "kaos_id_peamine": "11103",
+      "aadr_id": [
+        "6687116"
+      ],
+      "adrid": null,
+      "object_status": "EHITIS_SEISUND_OLEMA",
+      "ET": "Hoone 102032773 (Suvila): Linna AÜ 1062, Sillamäe linn, Ida-Viru maakond",
+      "EN": "Building 102032773 (Suvila): Linna AÜ 1062, Sillamäe linn, Ida-Viru maakond",
+      "RU": "Здание 102032773 (Suvila): Linna AÜ 1062, Sillamäe linn, Ida-Viru maakond"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "crs": {
+        "type": "name",
+        "properties": {
+          "name": "EPSG:3301"
+        }
+      },
+      "coordinates": [
+        [
+          [
+            713093.18,
+            6589054.8
+          ],
+          [
+            713094.31,
+            6589035.51
+          ],
+          [
+            713128.06,
+            6589035.31
+          ],
+          [
+            713125.92,
+            6589056.54
+          ],
+          [
+            713093.18,
+            6589054.8
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "object_type": "KAYK",
+      "object_code": "85101:004:0020",
+      "object_address": "Ida-Viru maakond, Sillamäe linn, Linna AÜ 1062",
+      "object_name": "Katastriüksus",
+      "ads_oid": "CU00529060",
+      "kaos_id_peamine": null,
+      "aadr_id": [
+        "5132411",
+        "6687116"
+      ],
+      "adrid": null,
+      "object_status": null,
+      "ET": "Katastriüksus 85101:004:0020: Linna AÜ 1062, Sillamäe linn, Ida-Viru maakond",
+      "EN": "Cadastral 85101:004:0020: Linna AÜ 1062, Sillamäe linn, Ida-Viru maakond",
+      "RU": "Kадастр 85101:004:0020: Linna AÜ 1062, Sillamäe linn, Ida-Viru maakond"
+    }
+  }
+]

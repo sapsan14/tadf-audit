@@ -12,13 +12,13 @@ import streamlit as st  # noqa: E402
 from app._state import get_current, set_current  # noqa: E402
 from tadf.api.imports import (  # noqa: E402
     list_pending,
-    map_ehr,
     map_teatmik,
     mark_applied,
     mark_rejected,
 )
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
-from tadf.external.links import ehr_building_url, teatmik_company_url  # noqa: E402
+from tadf.external.ehr_client import lookup_ehr  # noqa: E402
+from tadf.external.links import teatmik_company_url  # noqa: E402
 from tadf.intake.document_extract import extract_from_upload  # noqa: E402
 from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.llm.extractor import diff as _extract_diff  # noqa: E402
@@ -63,63 +63,15 @@ if _PENDING_KEY in st.session_state:
 
 
 # ---------------------------------------------------------------------------
-# 📥 Pending imports from the bookmarklet / Tampermonkey userscript.
-# When the auditor clicks "Открыть в EHR/Teatmik" elsewhere on this page,
-# the helper running in the auditor's browser POSTs data to
-# /api/import-{ehr,teatmik}/{audit_id}; the row sits in pending_import
-# until accepted or rejected here.
+# 📥 Pending imports from the Teatmik bookmarklet / Tampermonkey userscript.
+# (EHR no longer goes through here — we hit the public ehr.ee API directly
+# from Hetzner via tadf.external.ehr_client.lookup_ehr; see the dedicated
+# "Подгрузить из EHR" button below the EHR-code field.)
 # ---------------------------------------------------------------------------
 if audit.id is not None:
     _imports = list_pending(audit.id)
     for imp in _imports:
-        if imp.kind == "ehr":
-            mapped = map_ehr(imp.payload)
-            current = b.model_dump()
-            rows = _extract_diff(current, mapped)
-            with st.container(border=True):
-                st.markdown(
-                    f"📥 **Импорт из EHR** — получено "
-                    f"{imp.received_at.strftime('%H:%M:%S')} · "
-                    f"полей: **{len(rows)}**"
-                )
-                if imp.source_url:
-                    st.caption(f"Источник: {imp.source_url}")
-                if not rows:
-                    st.success("Все поля совпадают с уже введёнными — нечего применять.")
-                else:
-                    hc1, hc2, hc3, hc4 = st.columns([2, 3, 3, 1])
-                    hc1.markdown("**Поле**")
-                    hc2.markdown("**Сейчас**")
-                    hc3.markdown("**Из EHR**")
-                    hc4.markdown("**✅**")
-                    accept: dict[str, bool] = {}
-                    for field, cur, proposed in rows:
-                        rc1, rc2, rc3, rc4 = st.columns([2, 3, 3, 1])
-                        rc1.write(f"`{field}`")
-                        rc2.write("(пусто)" if cur in (None, "") else str(cur))
-                        rc3.write(str(proposed))
-                        accept[field] = rc4.checkbox(
-                            "",
-                            value=True,
-                            key=f"imp_ehr_accept_{imp.id}_{field}",
-                            label_visibility="collapsed",
-                        )
-                    ac1, ac2, _ = st.columns([2, 2, 4])
-                    if ac1.button(
-                        "✅ Применить выбранные",
-                        type="primary",
-                        key=f"imp_ehr_apply_{imp.id}",
-                    ):
-                        chosen = {f: mapped[f] for f, ok in accept.items() if ok and f in mapped}
-                        st.session_state[_PENDING_KEY] = chosen
-                        mark_applied(imp.id)
-                        st.rerun()
-                    if ac2.button("❌ Отклонить", key=f"imp_ehr_reject_{imp.id}"):
-                        mark_rejected(imp.id)
-                        st.rerun()
-                with st.expander("🔍 Сырой JSON из EHR (debug)", expanded=False):
-                    st.json(imp.payload)
-        elif imp.kind == "teatmik":
+        if imp.kind == "teatmik":
             mapped = map_teatmik(imp.payload)
             with st.container(border=True):
                 st.markdown(
@@ -314,38 +266,88 @@ with col2:
         or None
     )
 
-# EHR / Maa-amet deep-link row. If the audit is saved, we tack on a
-# per-audit TADF token so the in-browser helper (bookmarklet /
-# Tampermonkey userscript) can POST data back. Without a saved audit_id,
-# the link is just a plain deep link — Fjodor still gets to the right
-# page, but auto-import won't work until he saves the audit.
-_ehr_link = ehr_building_url(b.ehr_code, b.kataster_no)
-if _ehr_link:
-    if audit.id is not None:
-        _ehr_link_full = _with_token_fragment(_ehr_link, audit.id)
-        ehr_label = "🔎 Открыть в EHR (авто-импорт)"
-    else:
-        _ehr_link_full = _ehr_link
-        ehr_label = "🔗 Открыть на ehr.ee (без авто-импорта — сохрани аудит)"
-    lc1, lc2, _ = st.columns([2, 2, 4])
-    lc1.link_button(ehr_label, _ehr_link_full, use_container_width=True)
-    if b.kataster_no:
-        lc2.link_button(
-            "🗺️ Maa-amet (по кадастру)",
-            f"https://geoportaal.maaamet.ee/est/Kaardirakendused/Kinnistu-otsing-p82.html?nupp=&otsing={b.kataster_no}",
-            use_container_width=True,
-        )
-    if audit.id is not None:
-        st.caption(
-            "💡 После Smart-ID логина установленный bookmarklet / Tampermonkey "
-            "userscript автоматически отправит данные в этот аудит. "
-            "Подключение настраивается на странице **🔌 Подключения**."
-        )
-else:
-    st.caption(
-        "💡 Введите EHR-код или kataster выше — появятся ссылки прямо на "
-        "страницы здания в ehr.ee и Maa-amet."
+# EHR direct lookup — uses the public e-ehitus API
+# (livekluster.ehr.ee/api/building/v3/buildingData?ehr_code=…) which
+# requires no auth. One click → all fields populated. The preview/diff
+# pattern reuses the same _PENDING_KEY apply machinery as the project-
+# doc extractor so we never write to widgets after they've rendered.
+_EHR_RESULT_KEY = f"_ehr_result_{scope}"
+
+lc1, lc2, _ = st.columns([2, 2, 4])
+ehr_pull = lc1.button(
+    "🔎 Подгрузить из EHR",
+    type="primary",
+    disabled=not (b.ehr_code or "").strip(),
+    key=f"ehr_pull_{scope}",
+    use_container_width=True,
+    help=(
+        "Идёт прямо на livekluster.ehr.ee/api — без логина, без браузера. "
+        "Возвращает адрес, кадастр, габариты, год постройки, назначение."
+        if (b.ehr_code or "").strip()
+        else "Введите EHR-код выше, чтобы включить."
+    ),
+)
+if b.kataster_no:
+    lc2.link_button(
+        "🗺️ Maa-amet (по кадастру)",
+        f"https://geoportaal.maaamet.ee/est/Kaardirakendused/Kinnistu-otsing-p82.html?nupp=&otsing={b.kataster_no}",
+        use_container_width=True,
     )
+
+if ehr_pull:
+    with st.status("Тяну из EHR (livekluster.ehr.ee)…", expanded=True) as status:
+        result = lookup_ehr(b.ehr_code)
+        if result:
+            st.session_state[_EHR_RESULT_KEY] = result
+            status.update(label="Готово ✅", state="complete", expanded=False)
+        else:
+            status.update(label="Не нашёл такого здания в EHR ❌", state="error")
+    st.rerun()
+
+if _EHR_RESULT_KEY in st.session_state:
+    ehr_data = st.session_state[_EHR_RESULT_KEY]
+    current = b.model_dump()
+    rows = _extract_diff(current, ehr_data)
+    with st.container(border=True):
+        st.markdown(f"📥 **Импорт из EHR** — полей: **{len(rows)}**")
+        if not rows:
+            st.success("Все поля совпадают с уже введёнными — нечего применять.")
+            if st.button("OK", key=f"ehr_ok_{scope}"):
+                del st.session_state[_EHR_RESULT_KEY]
+                st.rerun()
+        else:
+            hc1, hc2, hc3, hc4 = st.columns([2, 3, 3, 1])
+            hc1.markdown("**Поле**")
+            hc2.markdown("**Сейчас**")
+            hc3.markdown("**Из EHR**")
+            hc4.markdown("**✅**")
+            accept_ehr: dict[str, bool] = {}
+            for field, cur, proposed in rows:
+                rc1, rc2, rc3, rc4 = st.columns([2, 3, 3, 1])
+                rc1.write(f"`{field}`")
+                rc2.write("(пусто)" if cur in (None, "") else str(cur))
+                rc3.write(str(proposed))
+                accept_ehr[field] = rc4.checkbox(
+                    "",
+                    value=True,
+                    key=f"ehr_accept_{scope}_{field}",
+                    label_visibility="collapsed",
+                )
+            ac1, ac2, _ = st.columns([2, 2, 4])
+            if ac1.button("✅ Применить выбранные", type="primary", key=f"ehr_apply_{scope}"):
+                chosen = {f: ehr_data[f] for f, ok in accept_ehr.items() if ok and f in ehr_data}
+                st.session_state[_PENDING_KEY] = chosen
+                del st.session_state[_EHR_RESULT_KEY]
+                for f, _, _ in rows:
+                    st.session_state.pop(f"ehr_accept_{scope}_{f}", None)
+                st.rerun()
+            if ac2.button("❌ Отклонить всё", key=f"ehr_reject_{scope}"):
+                del st.session_state[_EHR_RESULT_KEY]
+                for f, _, _ in rows:
+                    st.session_state.pop(f"ehr_accept_{scope}_{f}", None)
+                st.rerun()
+        with st.expander("🔍 Что вернул EHR (debug)", expanded=False):
+            st.json(ehr_data)
 
 b.use_purpose = st.text_input(
     "Kasutusotstarve (назначение)",
