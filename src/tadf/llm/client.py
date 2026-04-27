@@ -23,11 +23,7 @@ from typing import Any
 
 from anthropic import Anthropic
 
-from tadf.config import CACHE_DIR
 from tadf.llm.usage import record as _record_usage
-
-LLM_CACHE_DIR = CACHE_DIR / "llm"
-LLM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Per the original Phase 2 plan: Sonnet for prose-heavy tasks, Haiku for fast
 # classification + vision. Both support adaptive thinking and prompt caching.
@@ -79,32 +75,26 @@ def is_available() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Persistent cache
+# Persistent cache — thin wrappers around the generic external/cache.py
+# (kept here so existing call sites continue to work unchanged).
 # ---------------------------------------------------------------------------
+from tadf.external.cache import cache_get as _ec_get  # noqa: E402
+from tadf.external.cache import cache_key as _ec_key  # noqa: E402
+from tadf.external.cache import cache_put as _ec_put  # noqa: E402
+
+_LLM_NAMESPACE = "llm"
+
+
 def _cache_key(model: str, system: str, user: str, extra: str = "") -> str:
-    h = hashlib.sha256()
-    for piece in (model, system, user, extra):
-        h.update(piece.encode("utf-8"))
-        h.update(b"\x1e")  # record separator
-    return h.hexdigest()[:32]
-
-
-def _cache_path(key: str) -> Path:
-    return LLM_CACHE_DIR / f"{key}.json"
+    return _ec_key(model, system, user, extra)
 
 
 def _cache_get(key: str) -> Any | None:
-    p = _cache_path(key)
-    if not p.exists():
-        return None
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    return _ec_get(_LLM_NAMESPACE, key)
 
 
 def _cache_put(key: str, value: Any) -> None:
-    _cache_path(key).write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+    _ec_put(_LLM_NAMESPACE, key, value)
 
 
 # ---------------------------------------------------------------------------
