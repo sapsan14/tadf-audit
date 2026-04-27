@@ -59,6 +59,7 @@ pages = [
     st.Page("pages/4_📸_Фото.py", title="Фото", icon="📸"),
     st.Page("pages/5_📄_Готовый_отчёт.py", title="Готовый отчёт", icon="📄"),
     st.Page("pages/6_📚_Правовая_база.py", title="Правовая база", icon="📚"),
+    st.Page("pages/7_🔌_Подключения.py", title="Подключения", icon="🔌"),
 ]
 nav = st.navigation(pages, position="sidebar")
 
@@ -90,12 +91,23 @@ _seed_db_once()
 
 
 # ---------------------------------------------------------------------------
-# Pre-auth sidebar widgets — usage tracker + version footer render on the
-# login screen too. The footer is pinned to the bottom via CSS
-# (margin-top:auto on its wrapper), regardless of insertion order.
+# Sidebar order trick — render in this order:
+#   1. user-info slot (filled post-auth, empty on the login screen)
+#   2. usage tracker
+#   3. flex spacer (grows to push the footer to the bottom)
+#   4. version footer
+# We pre-create slot (1) BEFORE the auth gate so the post-auth user/logout
+# block lands ABOVE the spacer + footer in DOM order. Without this, the
+# user/logout block (rendered after require_login) would appear below the
+# footer.
 # ---------------------------------------------------------------------------
+user_info_slot = st.sidebar.empty()
+
 with st.sidebar:
     render_usage_block()
+    # Spacer that grows via flex:1 to push the footer all the way down.
+    # Targeted by CSS in _style.py.
+    st.markdown('<div class="tadf-sidebar-spacer"></div>', unsafe_allow_html=True)
 
 render_sidebar_footer()
 
@@ -110,9 +122,10 @@ _auth = require_login()
 
 
 # ---------------------------------------------------------------------------
-# Authenticated-only sidebar bits: user name + logout
+# Authenticated-only: fill the user-info slot we reserved above (DOM-wise
+# it sits above usage + spacer + footer, so the visual order stays correct).
 # ---------------------------------------------------------------------------
-with st.sidebar:
+with user_info_slot.container():
     user_display = st.session_state.get("name", "")
     if user_display:
         st.markdown(f"👤 **{user_display}**")

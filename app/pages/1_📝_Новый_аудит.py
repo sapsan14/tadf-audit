@@ -12,6 +12,7 @@ from datetime import date  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app._state import all_saved_audits, get_current, reload_from_db, set_current  # noqa: E402
+from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.external.links import teatmik_company_url  # noqa: E402
 from tadf.models import Auditor  # noqa: E402
 
@@ -234,15 +235,25 @@ audit.client.address = st.text_input(
     help="Адрес для переписки с заказчиком (может отличаться от адреса объекта).",
 ) or None
 
-# Teatmik deep-link — opens the official Estonian business registry in a
-# new tab so Fjodor can verify reg-code, status, and address. Direct API
-# scraping is blocked by Teatmik's bot protection (CAPTCHA), so the link
-# is the highest-leverage UX we can ship safely.
+# Teatmik deep-link. If the audit is saved (audit.id), embed the per-audit
+# import token so the in-browser helper (bookmarklet / Tampermonkey
+# userscript) auto-fills client.name/reg_code/address back here.
 _tk_query = audit.client.reg_code or audit.client.name
 if _tk_query and _tk_query.strip():
     link = teatmik_company_url(_tk_query)
     if link:
-        st.link_button("🔎 Проверить в Teatmik", link)
+        if audit.id is not None:
+            token = _issue_token(audit.id)
+            sep = "&" if "#" in link else "#"
+            link = f"{link}{sep}tadf={token}"
+            label = "🔎 Найти в Teatmik (авто-импорт)"
+        else:
+            label = "🔎 Найти в Teatmik (без авто-импорта — сохрани аудит)"
+        st.link_button(label, link)
+        st.caption(
+            "💡 Импорт работает после установки bookmarklet / Tampermonkey — "
+            "см. страницу **🔌 Подключения**."
+        )
 
 set_current(audit)
 st.success(f"Текущий номер: **{audit.display_no()}** ({audit.type} / {audit.subtype})")
