@@ -296,6 +296,7 @@ def improve_button_for(
     state_key_prefix: str,
     apply: Callable[[str], None],
     section_ref: str | None = None,
+    subtype: str | None = None,
     text_widget_key: str | None = None,
     label: str = "✨ Улучшить",
 ) -> None:
@@ -346,7 +347,7 @@ def improve_button_for(
     if clicked:
         with st.status("Claude обрабатывает…", expanded=False) as status:
             try:
-                result = improve_text(text, section_ref=section_ref)
+                result = improve_text(text, section_ref=section_ref, subtype=subtype)
                 st.session_state[result_key] = result
                 st.session_state.pop(error_key, None)
                 status.update(label=f"Готово ✅ ({result.label_ru})", state="complete")

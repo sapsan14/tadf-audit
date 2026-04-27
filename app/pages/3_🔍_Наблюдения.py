@@ -177,7 +177,9 @@ if llm_on:
                 st.write(f"Раздел: **{SECTION_LABELS.get(scratch_section, scratch_section)}**")
                 st.write(f"Длина тезисов: {len(scratch_bullets)} символов")
                 try:
-                    draft = draft_narrative(scratch_section, scratch_bullets)
+                    draft = draft_narrative(
+                        scratch_section, scratch_bullets, subtype=audit.subtype
+                    )
                     st.session_state[DRAFT_RESULT_KEY] = (scratch_section, draft)
                     _clear_error()
                     status.update(label="Готово ✅", state="complete", expanded=False)
@@ -501,7 +503,9 @@ for i, f in enumerate(audit.findings):
                 with st.status("Sonnet 4.6 правит грамматику…", expanded=True) as status:
                     try:
                         polished = polish_text(
-                            f.observation_raw, section_ref=f.section_ref
+                            f.observation_raw,
+                            section_ref=f.section_ref,
+                            subtype=audit.subtype,
                         )
                         st.session_state[_polish_key(i)] = polished
                         _clear_error()

@@ -26,7 +26,10 @@ from tadf.api.imports import (  # noqa: E402
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.external.ehr_client import lookup_ehr  # noqa: E402
 from tadf.external.links import maaamet_kataster_url, teatmik_company_url  # noqa: E402
-from tadf.intake.document_extract import extract_from_upload  # noqa: E402
+from tadf.intake.document_extract import (  # noqa: E402
+    LibreofficeMissing,
+    extract_from_upload,
+)
 from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.llm.extractor import diff as _extract_diff  # noqa: E402
 
@@ -220,14 +223,19 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
         )
     else:
         st.caption(
-            "Загрузите DOCX/PDF архитектурного проекта (пояснительная записка / "
-            "*seletuskiri*). Claude (Haiku 4.5) попытается извлечь поля здания. "
-            "Каждое поле показывается в превью с галочкой — применяются только "
-            "выбранные."
+            "Загрузите DOCX / PDF / DOC / ASiC-E архитектурного проекта "
+            "(пояснительная записка / *seletuskiri*). Claude (Haiku 4.5) "
+            "попытается извлечь поля здания. Каждое поле показывается "
+            "в превью с галочкой — применяются только выбранные."
+        )
+        st.caption(
+            "ℹ️ `.doc` и `.asice` с `.doc`-вложением требуют LibreOffice "
+            "на сервере (`apt-get install libreoffice`). Если его нет — "
+            "конвертируйте файл в DOCX/PDF локально и загрузите снова."
         )
         uploaded = st.file_uploader(
             "Файл проекта",
-            type=["docx", "pdf"],
+            type=["docx", "pdf", "doc", "asice"],
             accept_multiple_files=False,
             key=f"extract_upload_{scope}",
         )
@@ -244,6 +252,14 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
                     st.session_state[_EXTRACT_KEY] = extracted
                     st.session_state[_EXTRACT_RAW_KEY] = raw_text
                     status.update(label="Готово ✅", state="complete", expanded=False)
+                except LibreofficeMissing:
+                    status.update(label="Нужен LibreOffice ⚠️", state="error", expanded=True)
+                    st.error(
+                        "Чтобы открыть `.doc` (или `.asice` с `.doc` внутри), "
+                        "на сервере нужен LibreOffice. "
+                        "Локально — `apt-get install libreoffice`. "
+                        "Альтернатива: сохраните файл в DOCX/PDF и загрузите снова."
+                    )
                 except Exception as e:  # noqa: BLE001
                     status.update(label="Ошибка ❌", state="error", expanded=True)
                     st.error(f"Не удалось извлечь данные: {type(e).__name__}: {e}")

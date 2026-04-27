@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from tadf.llm.client import MODEL_POLISH, complete_text
 from tadf.llm.drafter import is_locked
+from tadf.llm.fewshot import examples_for, format_for_prompt
 
 SYSTEM_PROMPT = """\
 Sa oled eesti keele toimetaja, kes parandab ainult ehitise auditi aruande \
@@ -40,9 +41,20 @@ Vasta AINULT redigeeritud tekstiga (ilma selgituste, eessõnata).\
 """
 
 
-def polish_text(text: str, *, section_ref: str | None = None) -> str:
+def polish_text(
+    text: str,
+    *,
+    section_ref: str | None = None,
+    subtype: str | None = None,
+) -> str:
     """Return the polished version of `text`. If no changes are needed,
-    returns the original text unchanged."""
+    returns the original text unchanged.
+
+    When `section_ref` is given (and not locked), prepends 1-2 historical
+    corpus paragraphs from the same section as a tone/terminology reference.
+    Polish is conservative — examples nudge register and word choice but
+    never license fact changes.
+    """
     if section_ref and is_locked(section_ref):
         raise ValueError(
             f"Section {section_ref} is auditor-only — polish is disabled."
@@ -52,10 +64,15 @@ def polish_text(text: str, *, section_ref: str | None = None) -> str:
     if not text:
         return text
 
+    examples_block = ""
+    if section_ref:
+        examples_block = format_for_prompt(examples_for(section_ref, subtype=subtype))
+    user = f"{examples_block}\nToimetatav tekst:\n{text}" if examples_block else text
+
     polished = complete_text(
         model=MODEL_POLISH,
         system=SYSTEM_PROMPT,
-        user=text,
+        user=user,
         max_tokens=max(800, len(text) // 2),
     )
     if polished.strip() == "[NO_CHANGES_NEEDED]":

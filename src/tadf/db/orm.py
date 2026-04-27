@@ -166,3 +166,106 @@ class LlmUsageRow(Base):
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CorpusAuditRow(Base):
+    """One historical audit imported as a reference / training sample.
+
+    Lives in its own table (separate from `audit`) so reference imports never
+    mix with the auditor's working drafts. Schema is intentionally plain
+    text/JSON — no Claude-specific fields — so any future LLM provider can
+    consume the same data unchanged.
+
+    `source_path` is the absolute path of the original file on disk;
+    `source_sha256` is the file's content hash, used as the idempotency key
+    for re-ingest.
+    """
+
+    __tablename__ = "corpus_audit"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_path: Mapped[str] = mapped_column(String(1000), index=True)
+    source_sha256: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    source_format: Mapped[str] = mapped_column(String(8))  # docx/pdf/asice/doc
+    filename: Mapped[str] = mapped_column(String(500))
+    seq_no: Mapped[int | None] = mapped_column(Integer)
+    year: Mapped[int | None] = mapped_column(Integer, index=True)
+    audit_kind: Mapped[str | None] = mapped_column(String(8))  # EA/EP/TJ/TP/AU
+    subtype: Mapped[str | None] = mapped_column(String(20), index=True)  # erakorraline/kasutuseelne/korraline
+    title: Mapped[str | None] = mapped_column(String(500))
+    address: Mapped[str | None] = mapped_column(String(500))
+    ehr_code: Mapped[str | None] = mapped_column(String(20), index=True)
+    composer_name: Mapped[str | None] = mapped_column(String(200))
+    composer_company: Mapped[str | None] = mapped_column(String(200))
+    reviewer_name: Mapped[str | None] = mapped_column(String(200))
+    cover_json: Mapped[str] = mapped_column(Text, default="{}")  # full CoverInfo
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    sections: Mapped[list[CorpusSectionRow]] = relationship(
+        back_populates="audit", cascade="all, delete-orphan", order_by="CorpusSectionRow.id"
+    )
+
+
+class CorpusSectionRow(Base):
+    """One section extracted from a historical audit.
+
+    `body_text` is the parser output (plain Estonian text, joined paragraphs).
+    `extracted_json` is the optional LLM-distilled structure (boilerplate
+    flag, finding patterns) — populated lazily by the corpus extractor and
+    safe to re-run.
+
+    `section_ref` is normalised to canonical TADF section keys when possible
+    (e.g. "6.1", "8.7"); raw_number keeps the original numbering from the
+    source document for traceability.
+    """
+
+    __tablename__ = "corpus_section"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    audit_id: Mapped[int] = mapped_column(ForeignKey("corpus_audit.id"), index=True)
+    raw_number: Mapped[str] = mapped_column(String(20))
+    section_ref: Mapped[str | None] = mapped_column(String(20), index=True)
+    title: Mapped[str] = mapped_column(String(500))
+    body_text: Mapped[str] = mapped_column(Text)
+    extracted_json: Mapped[str | None] = mapped_column(Text)
+
+    audit: Mapped[CorpusAuditRow] = relationship(back_populates="sections")
+    clauses: Mapped[list[CorpusClauseRow]] = relationship(
+        back_populates="section", cascade="all, delete-orphan", order_by="CorpusClauseRow.id"
+    )
+
+
+class CorpusClauseRow(Base):
+    """An LLM-distilled, reusable clause from a corpus section.
+
+    Three kinds, all serving the few-shot retrieval pipeline:
+      - `boilerplate` — generic standing formulations the auditor reuses
+        across reports (e.g. "Auditeerimise eesmärgiks oli hinnata...").
+      - `finding`     — observation + recommendation pair, often
+        section-specific (e.g. cracked render, missing fire-stop).
+      - `summary`     — one-paragraph distillation of what the section
+        actually covers in this audit.
+
+    `text` is plain Estonian, ready to inject as a few-shot example.
+    `reusability` is the model's self-rated 0-1 score: how generic /
+    template-y the clause is (1 = pure boilerplate, 0 = completely
+    audit-specific). Few-shot retrieval prefers high-reusability clauses.
+
+    `model` records which LLM produced this row, so a future re-extraction
+    pass with a different provider can keep both versions side-by-side
+    instead of overwriting. `schema_version` lets us evolve the schema
+    without losing prior extractions.
+    """
+
+    __tablename__ = "corpus_clause"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    audit_id: Mapped[int] = mapped_column(ForeignKey("corpus_audit.id"), index=True)
+    section_id: Mapped[int] = mapped_column(ForeignKey("corpus_section.id"), index=True)
+    section_ref: Mapped[str | None] = mapped_column(String(20), index=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)  # boilerplate / finding / summary
+    text: Mapped[str] = mapped_column(Text)
+    recommendation: Mapped[str | None] = mapped_column(Text)  # only for kind=finding
+    reusability: Mapped[float] = mapped_column(default=0.5)
+    model: Mapped[str] = mapped_column(String(64))
+    schema_version: Mapped[int] = mapped_column(Integer, default=1)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    section: Mapped[CorpusSectionRow] = relationship(back_populates="clauses")
