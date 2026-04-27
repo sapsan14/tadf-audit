@@ -301,3 +301,92 @@ class CorpusClauseRow(Base):
     extracted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     section: Mapped[CorpusSectionRow] = relationship(back_populates="clauses")
+
+
+# ---------------------------------------------------------------------------
+# Directory tables
+# ---------------------------------------------------------------------------
+# Each table holds reusable, named entities that surface as combobox
+# suggestions across the form pages. They are KEYED BY NAME so:
+#   - typing a brand-new value upserts a fresh row (auto-saved with the
+#     draft, available for the next pick)
+#   - editing any sibling field for an existing name updates the same row
+#     (latest values win on the next pick)
+#   - the auditor can explicitly delete an entry (no delete cascade — these
+#     are pure suggestion lists, never FK targets)
+#
+# The per-audit AuditorRow / BuildingRow / ClientRow tables are unchanged
+# (audit history stays intact). The directory is mirrored from those rows
+# on every save_audit / upsert_audit call, plus a one-time backfill in
+# init_db() seeds the directory from existing rows on the first run after
+# this migration ships.
+
+
+class DirectoryAuditorRow(Base):
+    __tablename__ = "directory_auditor"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    company: Mapped[str | None] = mapped_column(String(200))
+    company_reg_nr: Mapped[str | None] = mapped_column(String(20))
+    kutsetunnistus_no: Mapped[str | None] = mapped_column(String(20))
+    qualification: Mapped[str | None] = mapped_column(String(100))
+    id_code: Mapped[str | None] = mapped_column(String(20))
+    independence_declaration: Mapped[str | None] = mapped_column(Text)
+    signature_image_path: Mapped[str | None] = mapped_column(String(500))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True
+    )
+
+
+class DirectoryClientRow(Base):
+    __tablename__ = "directory_client"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    reg_code: Mapped[str | None] = mapped_column(String(20))
+    contact_email: Mapped[str | None] = mapped_column(String(200))
+    contact_phone: Mapped[str | None] = mapped_column(String(50))
+    address: Mapped[str | None] = mapped_column(String(500))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True
+    )
+
+
+class DirectoryDesignerRow(Base):
+    """Designer (project author / projekteerija) — typed manually on the
+    Здание page or imported via Teatmik. Persisted as a name-keyed entry
+    so the next audit can pick it without retyping."""
+
+    __tablename__ = "directory_designer"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    reg_code: Mapped[str | None] = mapped_column(String(20))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True
+    )
+
+
+class DirectoryBuilderRow(Base):
+    """Builder (ehitaja) — typed manually on the Здание page or imported
+    via Teatmik. Same shape as DirectoryDesignerRow."""
+
+    __tablename__ = "directory_builder"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    reg_code: Mapped[str | None] = mapped_column(String(20))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True
+    )
+
+
+class DirectoryUsePurposeRow(Base):
+    """Building use purpose (kasutusotstarve) — short Estonian string,
+    e.g. "aiamaja", "elumaja", "tööstushoone". Promoted to a directory
+    so the dropdown stays short and curated rather than accumulating
+    typos via DISTINCT."""
+
+    __tablename__ = "directory_use_purpose"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    value: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True
+    )

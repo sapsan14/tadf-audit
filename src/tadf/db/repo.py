@@ -13,6 +13,11 @@ from tadf.db.orm import (
     AuditSnapshotRow,
     BuildingRow,
     ClientRow,
+    DirectoryAuditorRow,
+    DirectoryBuilderRow,
+    DirectoryClientRow,
+    DirectoryDesignerRow,
+    DirectoryUsePurposeRow,
     FindingRow,
     PhotoRow,
 )
@@ -133,6 +138,27 @@ def _row_to_photo(r: PhotoRow) -> Photo:
     )
 
 
+def _mirror_to_directory(s: Session, audit: Audit) -> None:
+    """Mirror the named entities of `audit` into the directory tables.
+
+    Called from save_audit and upsert_audit on every write. Each upsert is
+    keyed by name so the same person/company/value reuses one directory
+    row. Empty-named entities are ignored (we don't want a "" entry in
+    the dropdown).
+    """
+    upsert_directory_auditor(s, audit.composer)
+    upsert_directory_auditor(s, audit.reviewer)
+    if audit.client is not None:
+        upsert_directory_client(s, audit.client)
+    if audit.building is not None:
+        if audit.building.use_purpose:
+            upsert_directory_use_purpose(s, audit.building.use_purpose)
+        if audit.building.designer:
+            upsert_directory_designer(s, audit.building.designer)
+        if audit.building.builder:
+            upsert_directory_builder(s, audit.building.builder)
+
+
 def save_audit(s: Session, audit: Audit) -> int:
     composer = _auditor_to_row(audit.composer)
     reviewer = _auditor_to_row(audit.reviewer)
@@ -172,6 +198,7 @@ def save_audit(s: Session, audit: Audit) -> int:
         pr.audit_id = row.id
         s.add(pr)
     s.flush()
+    _mirror_to_directory(s, audit)
     return row.id
 
 
@@ -315,7 +342,234 @@ def upsert_audit(s: Session, audit: Audit) -> int:
         row.photos.append(pr)
 
     s.flush()
+    _mirror_to_directory(s, audit)
     return row.id
+
+
+# ---------------------------------------------------------------------------
+# Directory upsert / delete helpers — called by `_mirror_to_directory` on
+# every save and exposed for the «🗂 Справочник» management UI.
+# ---------------------------------------------------------------------------
+
+
+def _strip_or_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def upsert_directory_auditor(s: Session, src: Auditor) -> None:
+    name = _strip_or_none(src.full_name)
+    if name is None:
+        return
+    row = s.query(DirectoryAuditorRow).filter_by(full_name=name).one_or_none()
+    if row is None:
+        row = DirectoryAuditorRow(full_name=name)
+        s.add(row)
+    row.company = _strip_or_none(src.company)
+    row.company_reg_nr = _strip_or_none(src.company_reg_nr)
+    row.kutsetunnistus_no = _strip_or_none(src.kutsetunnistus_no)
+    row.qualification = _strip_or_none(src.qualification)
+    row.id_code = _strip_or_none(src.id_code)
+    row.independence_declaration = src.independence_declaration
+    row.signature_image_path = src.signature_image_path
+    s.flush()
+
+
+def upsert_directory_client(s: Session, src: Client) -> None:
+    name = _strip_or_none(src.name)
+    if name is None:
+        return
+    row = s.query(DirectoryClientRow).filter_by(name=name).one_or_none()
+    if row is None:
+        row = DirectoryClientRow(name=name)
+        s.add(row)
+    row.reg_code = _strip_or_none(src.reg_code)
+    row.contact_email = _strip_or_none(src.contact_email)
+    row.contact_phone = _strip_or_none(src.contact_phone)
+    row.address = _strip_or_none(src.address)
+    s.flush()
+
+
+def _upsert_simple(s: Session, model, key_attr: str, value: str | None) -> None:
+    cleaned = _strip_or_none(value)
+    if cleaned is None:
+        return
+    row = s.query(model).filter(getattr(model, key_attr) == cleaned).one_or_none()
+    if row is None:
+        s.add(model(**{key_attr: cleaned}))
+        s.flush()
+    else:
+        # Touch updated_at so the most-recently-used surfaces first in lists.
+        row.updated_at = func.now()
+        s.flush()
+
+
+def upsert_directory_designer(s: Session, name: str | None) -> None:
+    _upsert_simple(s, DirectoryDesignerRow, "name", name)
+
+
+def upsert_directory_builder(s: Session, name: str | None) -> None:
+    _upsert_simple(s, DirectoryBuilderRow, "name", name)
+
+
+def upsert_directory_use_purpose(s: Session, value: str | None) -> None:
+    _upsert_simple(s, DirectoryUsePurposeRow, "value", value)
+
+
+def delete_directory_auditor(s: Session, full_name: str) -> bool:
+    row = s.query(DirectoryAuditorRow).filter_by(full_name=full_name.strip()).one_or_none()
+    if row is None:
+        return False
+    s.delete(row)
+    s.flush()
+    return True
+
+
+def delete_directory_client(s: Session, name: str) -> bool:
+    row = s.query(DirectoryClientRow).filter_by(name=name.strip()).one_or_none()
+    if row is None:
+        return False
+    s.delete(row)
+    s.flush()
+    return True
+
+
+def delete_directory_designer(s: Session, name: str) -> bool:
+    row = s.query(DirectoryDesignerRow).filter_by(name=name.strip()).one_or_none()
+    if row is None:
+        return False
+    s.delete(row)
+    s.flush()
+    return True
+
+
+def delete_directory_builder(s: Session, name: str) -> bool:
+    row = s.query(DirectoryBuilderRow).filter_by(name=name.strip()).one_or_none()
+    if row is None:
+        return False
+    s.delete(row)
+    s.flush()
+    return True
+
+
+def delete_directory_use_purpose(s: Session, value: str) -> bool:
+    row = s.query(DirectoryUsePurposeRow).filter_by(value=value.strip()).one_or_none()
+    if row is None:
+        return False
+    s.delete(row)
+    s.flush()
+    return True
+
+
+def list_directory_auditors(s: Session) -> list[DirectoryAuditorRow]:
+    return list(
+        s.query(DirectoryAuditorRow).order_by(DirectoryAuditorRow.full_name).all()
+    )
+
+
+def list_directory_clients(s: Session) -> list[DirectoryClientRow]:
+    return list(s.query(DirectoryClientRow).order_by(DirectoryClientRow.name).all())
+
+
+def list_directory_designers(s: Session) -> list[DirectoryDesignerRow]:
+    return list(s.query(DirectoryDesignerRow).order_by(DirectoryDesignerRow.name).all())
+
+
+def list_directory_builders(s: Session) -> list[DirectoryBuilderRow]:
+    return list(s.query(DirectoryBuilderRow).order_by(DirectoryBuilderRow.name).all())
+
+
+def list_directory_use_purposes(s: Session) -> list[DirectoryUsePurposeRow]:
+    return list(
+        s.query(DirectoryUsePurposeRow).order_by(DirectoryUsePurposeRow.value).all()
+    )
+
+
+def backfill_directory(s: Session) -> dict[str, int]:
+    """One-time copy of existing AuditorRow / ClientRow / BuildingRow values
+    into the directory tables. Idempotent: rows already present (keyed by
+    name/value) are not duplicated, and existing directory rows are NOT
+    overwritten by older audit data.
+
+    Run from `init_db()` so the first deploy after this migration ships
+    surfaces the auditor's accumulated history in the dropdowns immediately,
+    instead of forcing them to re-pick every name once.
+    """
+    counts = {
+        "auditor": 0,
+        "client": 0,
+        "designer": 0,
+        "builder": 0,
+        "use_purpose": 0,
+    }
+
+    # Auditors — for every distinct name, take the *latest* AuditorRow as the
+    # canonical version (matches `latest_auditor_by_name`'s contract).
+    seen_names: set[str] = {
+        r.full_name for r in s.query(DirectoryAuditorRow.full_name).all() if r.full_name
+    } if False else set(
+        n for (n,) in s.query(DirectoryAuditorRow.full_name).all() if n
+    )
+    audit_rows = (
+        s.query(AuditorRow).order_by(AuditorRow.id.desc()).all()
+    )
+    for ar in audit_rows:
+        n = (ar.full_name or "").strip()
+        if not n or n in seen_names:
+            continue
+        s.add(
+            DirectoryAuditorRow(
+                full_name=n,
+                company=_strip_or_none(ar.company),
+                company_reg_nr=_strip_or_none(ar.company_reg_nr),
+                kutsetunnistus_no=_strip_or_none(ar.kutsetunnistus_no),
+                qualification=_strip_or_none(ar.qualification),
+                id_code=_strip_or_none(ar.id_code),
+                independence_declaration=ar.independence_declaration,
+                signature_image_path=ar.signature_image_path,
+            )
+        )
+        seen_names.add(n)
+        counts["auditor"] += 1
+
+    # Clients
+    seen_clients = {
+        n for (n,) in s.query(DirectoryClientRow.name).all() if n
+    }
+    for cr in s.query(ClientRow).order_by(ClientRow.id.desc()).all():
+        n = (cr.name or "").strip()
+        if not n or n in seen_clients:
+            continue
+        s.add(
+            DirectoryClientRow(
+                name=n,
+                reg_code=_strip_or_none(cr.reg_code),
+                contact_email=_strip_or_none(cr.contact_email),
+                contact_phone=_strip_or_none(cr.contact_phone),
+                address=_strip_or_none(cr.address),
+            )
+        )
+        seen_clients.add(n)
+        counts["client"] += 1
+
+    # Designers / Builders / Use_purpose — distinct strings from BuildingRow.
+    for col, model, key, bucket in (
+        (BuildingRow.designer, DirectoryDesignerRow, "name", "designer"),
+        (BuildingRow.builder, DirectoryBuilderRow, "name", "builder"),
+        (BuildingRow.use_purpose, DirectoryUsePurposeRow, "value", "use_purpose"),
+    ):
+        seen = {v for (v,) in s.query(getattr(model, key)).all() if v}
+        distinct_values = {
+            (v or "").strip() for (v,) in s.query(col).all() if v and v.strip()
+        }
+        for v in distinct_values - seen:
+            s.add(model(**{key: v}))
+            counts[bucket] += 1
+
+    s.flush()
+    return counts
 
 
 def next_seq_no(s: Session, year: int) -> int:

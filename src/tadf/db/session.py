@@ -52,6 +52,45 @@ _initialised = False
 _init_lock = threading.Lock()
 
 
+def _backfill_directory_once(session_factory) -> None:
+    """First time the directory tables exist on a deployment with prior
+    AuditorRow / ClientRow / BuildingRow data, copy distinct names/values
+    into the directory so the dropdowns surface accumulated history
+    immediately. Safe to run on every boot (idempotent — skipped when
+    the directory tables already have rows)."""
+    # Local import to avoid a cycle (repo imports orm, session imports orm).
+    from tadf.db.orm import (
+        DirectoryAuditorRow,
+        DirectoryBuilderRow,
+        DirectoryClientRow,
+        DirectoryDesignerRow,
+        DirectoryUsePurposeRow,
+    )
+    from tadf.db.repo import backfill_directory
+
+    s = session_factory()
+    try:
+        # Cheap shortcut: if any directory has at least one row already,
+        # assume the backfill has run before. Users can re-trigger by
+        # truncating the directory tables manually.
+        for model in (
+            DirectoryAuditorRow,
+            DirectoryClientRow,
+            DirectoryDesignerRow,
+            DirectoryBuilderRow,
+            DirectoryUsePurposeRow,
+        ):
+            if s.query(model).limit(1).count() > 0:
+                return
+        backfill_directory(s)
+        s.commit()
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+
+
 def init_db() -> None:
     """Idempotent + thread-safe schema bootstrap. Safe to call from many
     threads / multiple Streamlit reruns concurrently."""
@@ -72,6 +111,8 @@ def init_db() -> None:
         # Forward-only column adds for tables that already existed before
         # this commit (existing prod DB with the old `audit` schema).
         _apply_pending_migrations(_engine)
+        # One-time directory population from existing audit history.
+        _backfill_directory_once(_SessionLocal)
         _initialised = True
 
 
