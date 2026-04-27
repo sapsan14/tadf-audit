@@ -14,6 +14,7 @@ import streamlit as st  # noqa: E402
 from app._state import (  # noqa: E402
     all_saved_drafts,
     delete_audit_by_id,
+    ensure_draft_saved,
     get_current,
     reload_from_db,
     set_current,
@@ -344,6 +345,15 @@ improve_button_for(
     text_widget_key=k("client_addr"),
     apply=lambda v: setattr(audit.client, "address", v),
 )
+
+# Auto-save the draft now that the metadata + client form fields above
+# have rendered and committed their values. As soon as the user types
+# anything (purpose, client name, reg-code, etc.) audit.id is assigned —
+# token-based features (Teatmik link, pending-imports) start working
+# immediately, no manual «Save draft» click required. We DON'T rotate
+# `scope` mid-render to avoid widget-key drift; values are preserved via
+# the model on the next render's `value=` parameter.
+ensure_draft_saved(audit)
 
 # Teatmik deep-link. URL fragment carries `&target=client` so the
 # in-browser helper sends a hint and we apply directly to the client
