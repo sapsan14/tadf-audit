@@ -118,6 +118,82 @@ if _PENDING_KEY in st.session_state:
 
 
 # ---------------------------------------------------------------------------
+# 🔗 Address-to-EHR auto-chain.
+# After the user picks an address in the in-ADS picker, `_apply_inads_hit`
+# stashes a query in `_ehr_autosearch_q_<scope>`. We consume it here, run
+# the same `search_ehr` + `lookup_ehr` chain that the «🔎 Подгрузить из
+# EHR» button runs, and feed the result into the existing accept/diff
+# panel below. Total UX cost: one click on the address (instead of: pick
+# address → type EHR code → click button).
+# ---------------------------------------------------------------------------
+
+_AUTOSEARCH_KEY = f"_ehr_autosearch_q_{scope}"
+_EHR_RESULT_KEY = f"_ehr_result_{scope}"
+
+if _AUTOSEARCH_KEY in st.session_state:
+    autosearch_q = st.session_state.pop(_AUTOSEARCH_KEY)
+    label_q = autosearch_q[:60] + ("…" if len(autosearch_q) > 60 else "")
+    with st.status(
+        f"🔗 Ищу здание в EHR по «{label_q}»…", expanded=True
+    ) as _status:
+        hits = search_ehr(autosearch_q)
+        building_hits = [h for h in hits if h.object_type == "EHR_KOOD"]
+        if not building_hits:
+            _status.update(
+                label=(
+                    "EHR-кода для этого адреса не нашлось. "
+                    "Если знаете код — впишите вручную, иначе пропустите."
+                ),
+                state="error",
+                expanded=False,
+            )
+        else:
+            chosen = building_hits[0]
+            ehr_data = lookup_ehr(chosen.ehr_code) if chosen.ehr_code else None
+            if not ehr_data:
+                _status.update(
+                    label=(
+                        f"EHR не вернул здание {chosen.ehr_code} "
+                        "(возможно, оно недавно удалено)."
+                    ),
+                    state="error",
+                    expanded=False,
+                )
+            else:
+                # Pre-fill the EHR-code field via the same _PENDING_KEY
+                # the in-ADS picker uses, then queue the full lookup
+                # result for the existing diff/accept panel.
+                pending = st.session_state.get(_PENDING_KEY, {}) or {}
+                pending["ehr_code"] = chosen.ehr_code
+                st.session_state[_PENDING_KEY] = pending
+                st.session_state[_EHR_RESULT_KEY] = ehr_data
+                if len(building_hits) > 1:
+                    st.session_state[f"_ehr_alts_{scope}"] = [
+                        {
+                            "ehr_code": h.ehr_code,
+                            "address": h.address,
+                            "use_purpose": h.use_purpose,
+                        }
+                        for h in building_hits[1:]
+                    ]
+                _status.update(
+                    label=(
+                        f"Готово ✅ — здание EHR {chosen.ehr_code}"
+                        f" ({chosen.use_purpose or '?'})."
+                        + (
+                            f" Ещё {len(building_hits) - 1} здание(й) на этом адресе"
+                            f" — см. expander ниже."
+                            if len(building_hits) > 1
+                            else ""
+                        )
+                    ),
+                    state="complete",
+                    expanded=False,
+                )
+                st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # 📥 Pending imports from the Teatmik bookmarklet / Tampermonkey userscript.
 # (EHR no longer goes through here — we hit the public ehr.ee API directly
 # from Hetzner via tadf.external.ehr_client.lookup_ehr; see the dedicated
@@ -346,6 +422,20 @@ def _apply_inads_hit(hit) -> None:  # type: AddressHit
     if hit.kataster and not (b.kataster_no or "").strip():
         update["kataster_no"] = hit.kataster
     st.session_state[_PENDING_KEY] = update
+
+    # Chain «адрес → EHR код → полное здание»: queue an auto-search on
+    # the next render. Prefer the kataster when the in-ADS hit gave us
+    # one (deterministic — one cadastre maps to one cluster of buildings),
+    # else fall back to the address fragment. The autosearch handler
+    # below picks the first EHR_KOOD match, calls lookup_ehr, and pushes
+    # the full building data into the existing accept/diff UI — so the
+    # auditor goes from «adress in» to «full building data preview» in
+    # one click instead of three (address pick → type EHR code → click
+    # «Подгрузить из EHR»).
+    autosearch_q = (hit.kataster or "").strip() or (hit.address or "").strip()
+    if autosearch_q:
+        st.session_state[f"_ehr_autosearch_q_{scope}"] = autosearch_q
+
     # Clear the picker's own state so the dropdown collapses on rerun.
     st.session_state.pop(f"_addr_search_b_{scope}", None)
     st.session_state.pop(f"_addr_q_b_{scope}", None)
@@ -428,7 +518,9 @@ ensure_draft_saved(audit)
 # requires no auth. One click → all fields populated. The preview/diff
 # pattern reuses the same _PENDING_KEY apply machinery as the project-
 # doc extractor so we never write to widgets after they've rendered.
-_EHR_RESULT_KEY = f"_ehr_result_{scope}"
+# `_EHR_RESULT_KEY` is declared earlier in this module by the address-to-
+# EHR auto-chain block; reusing the same key here means the auto-chain
+# and the manual button feed the same diff panel below.
 
 # Buttons are always enabled — the click event itself triggers blur on
 # the text input above (commit-and-rerun in one go), so we validate the
