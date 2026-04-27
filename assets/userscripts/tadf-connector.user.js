@@ -1,9 +1,13 @@
 // ==UserScript==
 // @name         TADF Connector (Teatmik)
 // @namespace    https://github.com/sapsan14/tadf-audit
-// @version      0.4.0
+// @version      0.5.0
 // @description  Шлёт данные из Teatmik.ee в открытый аудит TADF (без копипастов).
 // @author       Anton Sokolov / Fjodor Sokolov
+// @homepageURL  https://tadf-audit.h2oatlas.ee/Подключения
+// @supportURL   https://github.com/sapsan14/tadf-audit/issues
+// @updateURL    https://tadf-audit.h2oatlas.ee/api/static/tadf-connector.user.js
+// @downloadURL  https://tadf-audit.h2oatlas.ee/api/static/tadf-connector.user.js
 // @match        https://www.teatmik.ee/*
 // @match        https://teatmik.ee/*
 // @grant        GM_xmlhttpRequest
