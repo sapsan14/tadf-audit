@@ -153,6 +153,8 @@ def save_audit(s: Session, audit: Audit) -> int:
         methodology_version=audit.methodology_version,
         visit_date=audit.visit_date,
         status=audit.status,
+        header_override=audit.header_override,
+        footer_override=audit.footer_override,
         composer_id=composer.id,
         reviewer_id=reviewer.id,
         building_id=building.id,
@@ -188,6 +190,8 @@ def load_audit(s: Session, audit_id: int) -> Audit:
         methodology_version=row.methodology_version,
         visit_date=row.visit_date,
         status=row.status,
+        header_override=row.header_override,
+        footer_override=row.footer_override,
         created_at=row.created_at,
         updated_at=row.updated_at,
         composer=_row_to_auditor(row.composer),
@@ -293,6 +297,8 @@ def upsert_audit(s: Session, audit: Audit) -> int:
     row.methodology_version = audit.methodology_version
     row.visit_date = audit.visit_date
     row.status = audit.status
+    row.header_override = audit.header_override
+    row.footer_override = audit.footer_override
 
     row.findings.clear()
     s.flush()

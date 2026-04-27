@@ -77,6 +77,11 @@ class AuditRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Auditor-supplied overrides for the per-page docx header/footer.
+    # NULL → renderer computes the default; non-null → used verbatim.
+    header_override: Mapped[str | None] = mapped_column(Text, default=None)
+    footer_override: Mapped[str | None] = mapped_column(Text, default=None)
+
     composer_id: Mapped[int] = mapped_column(ForeignKey("auditor.id"))
     reviewer_id: Mapped[int] = mapped_column(ForeignKey("auditor.id"))
     building_id: Mapped[int] = mapped_column(ForeignKey("building.id"))

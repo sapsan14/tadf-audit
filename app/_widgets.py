@@ -291,6 +291,62 @@ def hint_caption(message: str | None) -> None:
 _PENDING_PREFIX = "_imp_pending_widget_"
 
 
+def autofill_from_picker(
+    *,
+    slot: str,
+    name_widget_key: str,
+    field_to_widget: dict[str, str],
+    fetch: Callable[[str], dict | None],
+) -> bool:
+    """Watch a name combobox and autofill sibling fields from the DB on pick.
+
+    When the user picks a previously-entered name (e.g. «Fjodor Sokolov»
+    in Auditi koostas, «Olga Tšervjakova» in Заказчик), the rest of the
+    record — company, reg-code, kutsetunnistus, contact details — is
+    already in the DB from past audits. Re-typing it is pure friction.
+
+    Behaviour:
+      - Tracks the last-seen value of the name widget in
+        `st.session_state[f"_autofill_last_{slot}"]`.
+      - On change AND when `fetch(name)` returns a record, queues every
+        non-empty mapped field via the same `_imp_pending_widget_*` slot
+        that `flush_improve_pending()` consumes at the top of the page,
+        then `st.rerun()`s. The next render seeds widgets BEFORE they
+        instantiate — Streamlit-safe.
+      - No rerun on second sight of the same name (loop guard).
+
+    Returns True if a rerun was issued (caller doesn't need to know —
+    Streamlit unwinds the script — but useful for tests).
+
+    Must be called BEFORE the sibling-field widgets render in the same
+    script run, otherwise the queued values are flushed too late.
+    """
+    last_key = f"_autofill_last_{slot}"
+    picked = (st.session_state.get(name_widget_key) or "").strip()
+    if not picked:
+        st.session_state.pop(last_key, None)
+        return False
+    if st.session_state.get(last_key) == picked:
+        return False
+    st.session_state[last_key] = picked
+
+    record = fetch(picked)
+    if record is None:
+        return False
+
+    queued = False
+    for field, widget_key in field_to_widget.items():
+        value = record.get(field)
+        if not value:
+            continue
+        st.session_state[f"{_PENDING_PREFIX}{widget_key}"] = value
+        queued = True
+
+    if queued:
+        st.rerun()
+    return queued
+
+
 def flush_improve_pending() -> None:
     """Apply queued widget updates from improve_button_for accept handlers.
 

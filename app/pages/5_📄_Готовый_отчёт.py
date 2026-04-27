@@ -11,11 +11,16 @@ from pathlib import Path  # noqa: E402
 
 import streamlit as st  # noqa: E402
 
-from app._state import get_current  # noqa: E402
+from app._state import ensure_draft_saved, get_current  # noqa: E402
 from tadf.config import AUDITS_DIR  # noqa: E402
+from tadf.db.lookups import latest_footer_override, latest_header_override  # noqa: E402
 from tadf.db.repo import upsert_audit  # noqa: E402
 from tadf.db.session import session_scope  # noqa: E402
 from tadf.legal.checklist import check, soft_warnings  # noqa: E402
+from tadf.render.context_builder import (  # noqa: E402
+    default_footer_text,
+    default_header_text,
+)
 from tadf.render.docx_render import ChecklistFailed, render_to_path  # noqa: E402
 
 st.title("Готовый отчёт")
@@ -74,6 +79,60 @@ if warnings:
         for w in warnings:
             st.markdown(f"- **`{w.field}`** — {w.why_ru}")
 
+st.header("Колонтитулы (header / footer)")
+st.caption(
+    "Текст, который повторяется на каждой странице отчёта. По умолчанию "
+    "собирается автоматически из полей аудита (Töö nr, Töö nimetus, "
+    "Pädev isik). Если хотите свою формулировку — введите её тут; она "
+    "сохранится в этом черновике и будет предложена как стартовое "
+    "значение для следующего нового аудита."
+)
+
+# Seed values: prefer this draft's existing override; fall back to the
+# most-recent override on any OTHER draft; then to the computed default.
+_header_seed = (
+    audit.header_override
+    or (audit.id is None and latest_header_override(exclude_audit_id=None))
+    or default_header_text(audit)
+)
+_footer_seed = (
+    audit.footer_override
+    or (audit.id is None and latest_footer_override(exclude_audit_id=None))
+    or default_footer_text(audit)
+)
+
+hc1, hc2 = st.columns(2)
+with hc1:
+    new_header = st.text_area(
+        "Шапка страницы (page header)",
+        value=_header_seed,
+        height=110,
+        help=(
+            "Появляется в самом верху каждой страницы. Многострочный текст "
+            "поддерживается. Оставьте пустым — программа сгенерирует "
+            "значение из Töö nr / Töö nimetus автоматически."
+        ),
+    )
+with hc2:
+    new_footer = st.text_area(
+        "Подпись внизу страницы (page footer)",
+        value=_footer_seed,
+        height=110,
+        help=(
+            "Появляется внизу каждой страницы (под номером страницы). "
+            "Обычно: «Pädev isik: ФИО, квалификация, kutsetunnistus N»."
+        ),
+    )
+
+# Persist to the in-memory model on every rerun. Only treat as «override»
+# if the auditor actually deviated from the computed default — that way the
+# DB stays NULL for the common case and the renderer auto-recomputes when
+# audit fields change.
+default_header_now = default_header_text(audit)
+default_footer_now = default_footer_text(audit)
+audit.header_override = new_header.strip() if new_header.strip() and new_header.strip() != default_header_now.strip() else None
+audit.footer_override = new_footer.strip() if new_footer.strip() and new_footer.strip() != default_footer_now.strip() else None
+
 st.header("Сохранить и собрать .docx")
 
 col1, col2 = st.columns(2)
@@ -116,3 +175,7 @@ with col2:
             )
         except ChecklistFailed as e:
             st.error(str(e))
+
+# Auto-persist any in-memory mutations on this page (e.g. the header/footer
+# overrides edited just below) so a browser refresh keeps them.
+ensure_draft_saved(audit)

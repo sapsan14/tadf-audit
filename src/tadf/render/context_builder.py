@@ -52,6 +52,29 @@ def _audit_type_text(audit: Audit) -> str:
     )
 
 
+def default_header_text(audit: Audit) -> str:
+    """Compute the per-page header text used at the top of every page of
+    the rendered DOCX. Mirrors the historical corpus header layout
+    (Töö nr / Töö nimetus) — see screenshot in README/HOWTO."""
+    title = (audit.building.use_purpose or "EHITISE")
+    parts: list[str] = [f"{title} AUDITI ARUANNE"]
+    if audit.building.address:
+        parts.append(f"aadressil {audit.building.address}")
+    work_no = f"{audit.seq_no}/{audit.year}"
+    return f"Töö nr.: {work_no}\nTöö nimetus: {' '.join(parts)}"
+
+
+def default_footer_text(audit: Audit) -> str:
+    """Compute the per-page footer text used at the bottom of every page."""
+    rev = audit.reviewer
+    bits: list[str] = [rev.full_name]
+    if rev.qualification:
+        bits.append(rev.qualification)
+    if rev.kutsetunnistus_no:
+        bits.append(f"kutsetunnistus {rev.kutsetunnistus_no}")
+    return "Pädev isik: " + ", ".join(bits)
+
+
 def _photo_block(audit: Audit, tpl: DocxTemplate | None) -> list[dict[str, Any]]:
     """Build the photo list, with embedded images if a template is provided.
 
@@ -96,6 +119,10 @@ def build_context(audit: Audit, tpl: DocxTemplate | None = None) -> dict[str, An
 
     legal_refs = [{"code": r.code, "title_et": r.title_et} for r in for_section("12", audit.type)]
 
+    # Per-page header / footer — auditor-supplied override or computed default.
+    header_text = audit.header_override or default_header_text(audit)
+    footer_text = audit.footer_override or default_footer_text(audit)
+
     ctx: dict[str, Any] = {
         "audit": {
             "display_no": audit.display_no(),
@@ -105,6 +132,8 @@ def build_context(audit: Audit, tpl: DocxTemplate | None = None) -> dict[str, An
             "scope": audit.scope or "",
             "methodology_version": audit.methodology_version,
         },
+        "page_header": header_text,
+        "page_footer": footer_text,
         "audit_type_text": _audit_type_text(audit),
         "visit_date_str": audit.visit_date.strftime("%d.%m.%Y"),
         "cover": {"title": cover_title},

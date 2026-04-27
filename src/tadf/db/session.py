@@ -18,12 +18,33 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from tadf.config import DB_URL
 from tadf.db.orm import Base
+
+# Lightweight forward-only schema migrations for SQLite.
+# Each entry is (table, column, type-with-default). On startup we ALTER
+# TABLE only if the column is missing, so it's idempotent and safe to run
+# every boot. Keep this list append-only — never edit a past entry.
+_PENDING_MIGRATIONS: list[tuple[str, str, str]] = [
+    ("audit", "header_override", "TEXT"),
+    ("audit", "footer_override", "TEXT"),
+]
+
+
+def _apply_pending_migrations(engine) -> None:
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, column, coltype in _PENDING_MIGRATIONS:
+            if not insp.has_table(table):
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            if column in existing:
+                continue
+            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {coltype}'))
 
 _engine = create_engine(DB_URL, echo=False, future=True)
 _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
@@ -48,6 +69,9 @@ def init_db() -> None:
             # "already exists". Tolerate it; the schema is correct either way.
             if "already exists" not in str(e).lower():
                 raise
+        # Forward-only column adds for tables that already existed before
+        # this commit (existing prod DB with the old `audit` schema).
+        _apply_pending_migrations(_engine)
         _initialised = True
 
 
