@@ -48,7 +48,12 @@ def _looks_like_bullets(text: str) -> bool:
     return bool("\n" in text and len(text.split()) < 30)
 
 
-def improve_text(text: str, *, section_ref: str | None = None) -> ImproveResult:
+def improve_text(
+    text: str,
+    *,
+    section_ref: str | None = None,
+    subtype: str | None = None,
+) -> ImproveResult:
     text = text.strip()
     if not text:
         raise ValueError("Поле пустое — нечего улучшать.")
@@ -63,16 +68,16 @@ def improve_text(text: str, *, section_ref: str | None = None) -> ImproveResult:
         return ImproveResult(
             action="translate",
             original=text,
-            improved=draft_narrative(fallback_section, text),
+            improved=draft_narrative(fallback_section, text, subtype=subtype),
         )
     if _looks_like_bullets(text):
         return ImproveResult(
             action="draft",
             original=text,
-            improved=draft_narrative(fallback_section, text),
+            improved=draft_narrative(fallback_section, text, subtype=subtype),
         )
     return ImproveResult(
         action="polish",
         original=text,
-        improved=polish_text(text, section_ref=section_ref),
+        improved=polish_text(text, section_ref=section_ref, subtype=subtype),
     )
