@@ -10,6 +10,7 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
+from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
 from tadf.api.imports import (  # noqa: E402
     list_pending,
     map_teatmik,
@@ -33,6 +34,8 @@ def _with_token_fragment(url: str, audit_id: int, *, target: str | None = None) 
     sep = "&" if "#" in url else "#"
     extra = f"&target={target}" if target else ""
     return f"{url}{sep}tadf={token}{extra}"
+
+flush_improve_pending()
 
 st.title("Здание (auditi objekt)")
 
@@ -342,6 +345,14 @@ if b.kataster_no:
         use_container_width=True,
         help="Открывает кадастр на интерактивной карте Maa-amet.",
     )
+else:
+    lc2.button(
+        "🗺️ Maa-amet (по кадастру)",
+        disabled=True,
+        key=f"maaamet_disabled_{scope}",
+        help="Введите кадастровый номер слева — ссылка на geoportaal.maaamet.ee активируется.",
+        use_container_width=True,
+    )
 
 if ehr_pull or ehr_refresh:
     with st.status("Тяну из EHR (livekluster.ehr.ee)…", expanded=True) as status:
@@ -579,12 +590,19 @@ with col1:
             "Берётся из ehitusprojekti документации, если есть."
         ),
     ) or None
-    if b.designer:
-        link = teatmik_company_url(b.designer)
-        if link:
-            if audit.id is not None:
-                link = _with_token_fragment(link, audit.id, target="designer")
-            st.link_button("🔎 Teatmik (designer)", link, use_container_width=True)
+    _designer_link = teatmik_company_url(b.designer) if b.designer else None
+    if _designer_link:
+        if audit.id is not None:
+            _designer_link = _with_token_fragment(_designer_link, audit.id, target="designer")
+        st.link_button("🔎 Teatmik (designer)", _designer_link, use_container_width=True)
+    else:
+        st.button(
+            "🔎 Teatmik (designer)",
+            disabled=True,
+            key=f"teatmik_designer_disabled_{scope}",
+            help="Введите имя проектировщика выше — ссылка на Teatmik активируется.",
+            use_container_width=True,
+        )
 with col2:
     b.builder = st.text_input(
         "Builder (ehitaja)",
@@ -592,12 +610,19 @@ with col2:
         key=k("builder"),
         help="Кто строил здание (генподрядчик).",
     ) or None
-    if b.builder:
-        link = teatmik_company_url(b.builder)
-        if link:
-            if audit.id is not None:
-                link = _with_token_fragment(link, audit.id, target="builder")
-            st.link_button("🔎 Teatmik (builder)", link, use_container_width=True)
+    _builder_link = teatmik_company_url(b.builder) if b.builder else None
+    if _builder_link:
+        if audit.id is not None:
+            _builder_link = _with_token_fragment(_builder_link, audit.id, target="builder")
+        st.link_button("🔎 Teatmik (builder)", _builder_link, use_container_width=True)
+    else:
+        st.button(
+            "🔎 Teatmik (builder)",
+            disabled=True,
+            key=f"teatmik_builder_disabled_{scope}",
+            help="Введите имя строителя выше — ссылка на Teatmik активируется.",
+            use_container_width=True,
+        )
 
 if b.pre_2003:
     b.substitute_docs_note = st.text_area(
@@ -612,6 +637,13 @@ if b.pre_2003:
         ),
         key=k("substitute_docs_note"),
     ) or None
+    improve_button_for(
+        text=b.substitute_docs_note or "",
+        state_key_prefix=f"imp_subst_docs_{scope}",
+        section_ref="2",
+        text_widget_key=k("substitute_docs_note"),
+        apply=lambda v: setattr(b, "substitute_docs_note", v),
+    )
 
 audit.building = b
 set_current(audit)

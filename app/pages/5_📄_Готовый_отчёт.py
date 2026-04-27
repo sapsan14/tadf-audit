@@ -13,7 +13,7 @@ import streamlit as st  # noqa: E402
 
 from app._state import get_current  # noqa: E402
 from tadf.config import AUDITS_DIR  # noqa: E402
-from tadf.db.repo import save_audit  # noqa: E402
+from tadf.db.repo import upsert_audit  # noqa: E402
 from tadf.db.session import session_scope  # noqa: E402
 from tadf.legal.checklist import check  # noqa: E402
 from tadf.render.docx_render import ChecklistFailed, render_to_path  # noqa: E402
@@ -36,11 +36,16 @@ st.header("Сохранить и собрать .docx")
 
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("💾 Сохранить аудит в БД", type="secondary"):
+    save_label = "💾 Обновить черновик в БД" if audit.id else "💾 Сохранить черновик в БД"
+    if st.button(save_label, type="secondary"):
         with session_scope() as s:
-            audit_id = save_audit(s, audit)
+            audit_id = upsert_audit(s, audit)
         audit.id = audit_id
-        st.success(f"Сохранено как audit #{audit_id}")
+        st.session_state["loaded_id"] = audit_id
+        st.success(
+            f"{'Обновлено' if save_label.startswith('💾 Обновить') else 'Сохранено'} "
+            f"как audit #{audit_id}"
+        )
 
 with col2:
     enforce = st.checkbox(

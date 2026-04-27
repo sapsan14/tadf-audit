@@ -11,7 +11,15 @@ from datetime import date  # noqa: E402
 
 import streamlit as st  # noqa: E402
 
-from app._state import all_saved_audits, get_current, reload_from_db, set_current  # noqa: E402
+from app._state import (  # noqa: E402
+    all_saved_drafts,
+    delete_audit_by_id,
+    get_current,
+    reload_from_db,
+    set_current,
+    start_new_draft,
+)
+from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
 from tadf.api.imports import (  # noqa: E402
     list_pending,
     map_teatmik,
@@ -22,19 +30,93 @@ from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.external.links import teatmik_company_url  # noqa: E402
 from tadf.models import Auditor  # noqa: E402
 
-st.title("Новый аудит / открыть существующий")
+flush_improve_pending()
 
-with st.expander("Открыть сохранённый аудит", expanded=False):
-    saved = all_saved_audits()
-    if saved:
-        labels = [f"#{a.id} — {a.display_no()} — {a.building.address[:50]}" for a in saved]
-        idx = st.selectbox("Выберите аудит", options=range(len(saved)), format_func=lambda i: labels[i])
-        if st.button("Загрузить", type="primary"):
-            reload_from_db(saved[idx].id)
-            st.success(f"Загружен аудит #{saved[idx].id}")
-            st.rerun()
+st.title("Аудит — черновики и текущая работа")
+
+# ---------------------------------------------------------------------------
+# Drafts manager — list/load/delete sits at the top of this page so the
+# auditor sees everything they're working on as soon as they open the form.
+# Only `status='draft'` rows are listed; signed/submitted audits are hidden
+# (they don't need to be re-edited and shouldn't be casually deletable).
+# ---------------------------------------------------------------------------
+with st.container(border=True):
+    drafts = all_saved_drafts()
+    loaded_id = st.session_state.get("loaded_id")
+
+    head1, head2 = st.columns([3, 1])
+    head1.subheader(f"📋 Сохранённые черновики ({len(drafts)})")
+    if head2.button(
+        "➕ Новый аудит",
+        key="drafts_new_btn",
+        use_container_width=True,
+        help="Очистить форму и начать новый черновик с нуля.",
+    ):
+        start_new_draft()
+        st.rerun()
+
+    if not drafts:
+        st.caption(
+            "Черновиков пока нет — заполните форму ниже и сохраните на странице "
+            "**📄 Готовый отчёт** кнопкой «💾 Сохранить черновик»."
+        )
     else:
-        st.caption("Сохранённых аудитов пока нет.")
+        for d in drafts:
+            is_current = d.id == loaded_id
+            with st.container(border=is_current):
+                cc1, cc2, cc3, cc4 = st.columns([5, 2, 1, 1])
+                addr = (d.building.address or "").strip() or "(адрес не введён)"
+                updated = d.updated_at.strftime("%Y-%m-%d %H:%M") if d.updated_at else "—"
+                cc1.markdown(
+                    f"**#{d.id} · {d.display_no()}** — {addr[:80]}  \n"
+                    f"<small>{d.subtype} · {d.type} · обновлён {updated}</small>",
+                    unsafe_allow_html=True,
+                )
+                cc2.markdown(
+                    f"<small>наблюдений: **{len(d.findings)}**, фото: **{len(d.photos)}**</small>",
+                    unsafe_allow_html=True,
+                )
+                if is_current:
+                    cc3.markdown("✅<br/><small>тек.</small>", unsafe_allow_html=True)
+                else:
+                    if cc3.button(
+                        "📂",
+                        key=f"draft_load_{d.id}",
+                        help="Загрузить этот черновик в форму",
+                        use_container_width=True,
+                    ):
+                        reload_from_db(d.id)
+                        st.rerun()
+
+                pending_key = f"_draft_del_confirm_{d.id}"
+                if st.session_state.get(pending_key):
+                    if cc4.button(
+                        "✓",
+                        key=f"draft_del_ok_{d.id}",
+                        type="primary",
+                        help="Подтвердить удаление",
+                        use_container_width=True,
+                    ):
+                        delete_audit_by_id(d.id)
+                        st.session_state.pop(pending_key, None)
+                        if loaded_id == d.id:
+                            start_new_draft()
+                        st.rerun()
+                    if st.button(
+                        "Отмена",
+                        key=f"draft_del_cancel_{d.id}",
+                    ):
+                        st.session_state.pop(pending_key, None)
+                        st.rerun()
+                else:
+                    if cc4.button(
+                        "🗑️",
+                        key=f"draft_del_{d.id}",
+                        help="Удалить черновик (с подтверждением)",
+                        use_container_width=True,
+                    ):
+                        st.session_state[pending_key] = True
+                        st.rerun()
 
 audit = get_current()
 scope = audit.id or "new"
@@ -124,6 +206,14 @@ audit.purpose = st.text_area(
     ),
     key=k("purpose"),
 )
+improve_button_for(
+    text=audit.purpose or "",
+    state_key_prefix=f"imp_purpose_{scope}",
+    section_ref="3",
+    text_widget_key=k("purpose"),
+    apply=lambda v: setattr(audit, "purpose", v),
+)
+
 audit.scope = st.text_area(
     "Область аудита (auditi ulatus)",
     value=audit.scope or "",
@@ -135,6 +225,13 @@ audit.scope = st.text_area(
         "позднейших претензий."
     ),
     key=k("scope"),
+)
+improve_button_for(
+    text=audit.scope or "",
+    state_key_prefix=f"imp_scope_{scope}",
+    section_ref="3",
+    text_widget_key=k("scope"),
+    apply=lambda v: setattr(audit, "scope", v),
 )
 
 st.header("Аудиторы")
@@ -240,27 +337,45 @@ audit.client.address = st.text_input(
     key=k("client_addr"),
     help="Адрес для переписки с заказчиком (может отличаться от адреса объекта).",
 ) or None
+improve_button_for(
+    text=audit.client.address or "",
+    state_key_prefix=f"imp_client_addr_{scope}",
+    section_ref=None,
+    text_widget_key=k("client_addr"),
+    apply=lambda v: setattr(audit.client, "address", v),
+)
 
-# Teatmik deep-link. The URL fragment includes target=client so the
-# in-browser helper sends a hint, and we apply directly to the client
-# bundle (name + reg_code + address + email + phone) without showing the
-# designer/builder/client picker on the Здание page.
-_tk_query = audit.client.reg_code or audit.client.name
-if _tk_query and _tk_query.strip():
-    link = teatmik_company_url(_tk_query)
-    if link:
-        if audit.id is not None:
-            token = _issue_token(audit.id)
-            sep = "&" if "#" in link else "#"
-            link = f"{link}{sep}tadf={token}&target=client"
-            label = "🔎 Найти в Teatmik (авто-импорт)"
-        else:
-            label = "🔎 Найти в Teatmik (без авто-импорта — сохрани аудит)"
-        st.link_button(label, link)
-        st.caption(
-            "💡 Импорт работает после установки bookmarklet / Tampermonkey — "
-            "см. страницу **🔌 Подключения**."
-        )
+# Teatmik deep-link. URL fragment carries `&target=client` so the
+# in-browser helper sends a hint and we apply directly to the client
+# bundle (name + reg_code + address + email + phone) on the Новый аудит
+# page below — no designer/builder/client picker.
+# The button is ALWAYS rendered: when there's no name/reg-code yet, it
+# renders disabled with a hint so the auditor sees the integration exists.
+_tk_query = (audit.client.reg_code or audit.client.name or "").strip()
+_tk_link = teatmik_company_url(_tk_query) if _tk_query else None
+if _tk_link:
+    if audit.id is not None:
+        token = _issue_token(audit.id)
+        sep = "&" if "#" in _tk_link else "#"
+        _tk_link = f"{_tk_link}{sep}tadf={token}&target=client"
+        _tk_label = "🔎 Найти в Teatmik (авто-импорт)"
+    else:
+        _tk_label = "🔎 Найти в Teatmik (без авто-импорта — сохрани аудит)"
+    st.link_button(_tk_label, _tk_link)
+else:
+    st.button(
+        "🔎 Найти в Teatmik",
+        disabled=True,
+        key=f"teatmik_client_disabled_{scope}",
+        help=(
+            "Введите название заказчика или его рег-код выше — "
+            "ссылка на Teatmik активируется."
+        ),
+    )
+st.caption(
+    "💡 Импорт работает после установки bookmarklet / Tampermonkey — "
+    "см. страницу **🔌 Подключения**."
+)
 
 # ---------------------------------------------------------------------------
 # 📥 Pending imports from Teatmik bookmarklet/userscript with target=client.
