@@ -97,6 +97,8 @@ See `/home/anton/.claude/plans/look-into-audit-folder-playful-snail.md` for the 
 - **Phase 0 (planning):** done.
 - **Phase 1 (local MVP):** **shipped.** Form + DOCX render + §5 checklist + SQLite + photo embed.
 - **Phase 2 (LLM assist):** **shipped.** All four helpers wired. Models: Sonnet 4.6 (drafter, polish), Haiku 4.5 (captioner, ranker). Key resolution: env var → `~/.anthropic/key` → Streamlit secrets.
+- **Project-doc AI extractor (2026-04-27):** **shipped.** Upload DOCX/PDF on Здание page → Haiku 4.5 extracts Building fields → preview/diff with checkbox accept → pending-slot apply. Cache in `data/cache/extract/`. Code: `src/tadf/llm/extractor.py` + `src/tadf/intake/document_extract.py`.
+- **EHR.ee + Teatmik.ee scrapers (2026-04-27):** **deferred — both APIs are gated.** EHR (`livekluster.ehr.ee`) requires Keycloak OAuth on every data endpoint; the public site serves only an SPA shell. Teatmik returns "Palun kinnitage, et Te ei ole robot!" CAPTCHA on headless requests. Shipped instead: deep-link buttons (`src/tadf/external/links.py`) that open the official portal in a new tab so Fjodor can copy/paste manually. Real integration needs a separate sprint with either Keycloak OAuth credentials or a Teatmik API key.
 - **Phase 3 (signing):** not started. Smart-ID first per father's choice.
 - All later phases: documented in the plan.
 

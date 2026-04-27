@@ -10,6 +10,10 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
+from tadf.external.links import ehr_building_url, teatmik_company_url  # noqa: E402
+from tadf.intake.document_extract import extract_from_upload  # noqa: E402
+from tadf.llm import is_available as llm_available  # noqa: E402
+from tadf.llm.extractor import diff as _extract_diff  # noqa: E402
 
 st.title("Здание (auditi objekt)")
 
@@ -23,6 +27,130 @@ scope = audit.id or "new"
 
 def k(name: str) -> str:
     return f"b_{scope}_{name}"
+
+
+# ---------------------------------------------------------------------------
+# Pending-slot application (avoids Streamlit widget-state bug — see commit
+# e48387c). When the user clicks "Применить" on the extractor preview, we
+# stash the chosen fields here and rerun; this block applies them BEFORE
+# any widget renders, so we can also safely pop the widget keys to force
+# them to reseed from the new b.* values.
+# ---------------------------------------------------------------------------
+_PENDING_KEY = f"_pending_b_{scope}"
+if _PENDING_KEY in st.session_state:
+    pending = st.session_state.pop(_PENDING_KEY)
+    for field, value in pending.items():
+        if hasattr(b, field):
+            setattr(b, field, value)
+        st.session_state.pop(k(field), None)
+    audit.building = b
+    set_current(audit)
+
+
+# ---------------------------------------------------------------------------
+# 📄 Импорт из проекта — upload a project explanatory note (DOCX/PDF) and
+# let Claude extract building fields. Only fields the user explicitly
+# accepts are written to b.*.
+# ---------------------------------------------------------------------------
+_EXTRACT_KEY = f"_extract_result_{scope}"
+_EXTRACT_RAW_KEY = f"_extract_raw_{scope}"
+
+with st.expander("📄 Импорт из проекта (тезисы из seletuskiri)", expanded=False):
+    if not llm_available():
+        st.info(
+            "🤖 ИИ-извлечение выключено — нет ключа Anthropic. Заполните "
+            "поля вручную или настройте ANTHROPIC_API_KEY."
+        )
+    else:
+        st.caption(
+            "Загрузите DOCX/PDF архитектурного проекта (пояснительная записка / "
+            "*seletuskiri*). Claude (Haiku 4.5) попытается извлечь поля здания. "
+            "Каждое поле показывается в превью с галочкой — применяются только "
+            "выбранные."
+        )
+        uploaded = st.file_uploader(
+            "Файл проекта",
+            type=["docx", "pdf"],
+            accept_multiple_files=False,
+            key=f"extract_upload_{scope}",
+        )
+        run_clicked = st.button(
+            "🤖 Извлечь данные",
+            type="primary",
+            disabled=uploaded is None,
+            key=f"extract_run_{scope}",
+        )
+        if run_clicked and uploaded is not None:
+            with st.status("Claude (Haiku 4.5) читает документ…", expanded=True) as status:
+                try:
+                    extracted, raw_text = extract_from_upload(uploaded)
+                    st.session_state[_EXTRACT_KEY] = extracted
+                    st.session_state[_EXTRACT_RAW_KEY] = raw_text
+                    status.update(label="Готово ✅", state="complete", expanded=False)
+                except Exception as e:  # noqa: BLE001
+                    status.update(label="Ошибка ❌", state="error", expanded=True)
+                    st.error(f"Не удалось извлечь данные: {type(e).__name__}: {e}")
+            st.rerun()
+
+        # ---- Preview / diff panel ----
+        if _EXTRACT_KEY in st.session_state:
+            extracted = st.session_state[_EXTRACT_KEY]
+            current = b.model_dump()
+            rows = _extract_diff(current, extracted)
+            if not rows:
+                st.success(
+                    "✅ Все извлечённые поля совпадают с уже введёнными — "
+                    "применять нечего."
+                )
+                if st.button("OK", key=f"extract_ok_{scope}"):
+                    del st.session_state[_EXTRACT_KEY]
+                    st.session_state.pop(_EXTRACT_RAW_KEY, None)
+                    st.rerun()
+            else:
+                st.markdown(f"**Извлечено {len(rows)} поле(ей).** Снимите галочки, если что-то не то:")
+                accept: dict[str, bool] = {}
+                # Header row
+                hc1, hc2, hc3, hc4 = st.columns([2, 3, 3, 1])
+                hc1.markdown("**Поле**")
+                hc2.markdown("**Сейчас**")
+                hc3.markdown("**Извлечено**")
+                hc4.markdown("**✅**")
+                for field, cur, proposed in rows:
+                    rc1, rc2, rc3, rc4 = st.columns([2, 3, 3, 1])
+                    rc1.write(f"`{field}`")
+                    rc2.write("(пусто)" if cur in (None, "") else str(cur))
+                    rc3.write(str(proposed))
+                    accept[field] = rc4.checkbox(
+                        "",
+                        value=True,
+                        key=f"extract_accept_{scope}_{field}",
+                        label_visibility="collapsed",
+                    )
+                ac1, ac2, _ = st.columns([2, 2, 4])
+                if ac1.button(
+                    "✅ Применить выбранные",
+                    type="primary",
+                    key=f"extract_apply_{scope}",
+                ):
+                    chosen = {field: extracted[field] for field, ok in accept.items() if ok}
+                    st.session_state[_PENDING_KEY] = chosen
+                    del st.session_state[_EXTRACT_KEY]
+                    st.session_state.pop(_EXTRACT_RAW_KEY, None)
+                    for field in chosen:
+                        st.session_state.pop(f"extract_accept_{scope}_{field}", None)
+                    st.rerun()
+                if ac2.button("❌ Отклонить всё", key=f"extract_reject_{scope}"):
+                    del st.session_state[_EXTRACT_KEY]
+                    st.session_state.pop(_EXTRACT_RAW_KEY, None)
+                    for field, _, _ in rows:
+                        st.session_state.pop(f"extract_accept_{scope}_{field}", None)
+                    st.rerun()
+                # Debug — what Claude actually saw
+                if _EXTRACT_RAW_KEY in st.session_state:
+                    with st.expander("🔍 Что увидел Claude (debug)", expanded=False):
+                        raw = st.session_state[_EXTRACT_RAW_KEY]
+                        st.caption(f"Длина текста: {len(raw)} символов")
+                        st.text(raw[:5000] + ("…" if len(raw) > 5000 else ""))
 
 
 b.address = st.text_input(
@@ -63,6 +191,26 @@ with col2:
             key=k("ehr_code"),
         )
         or None
+    )
+
+# EHR / Maa-amet deep-link row — opens the official portal in a new tab
+# so Fjodor can copy/paste fields. Direct API access requires Keycloak
+# OAuth (out of scope for this sprint); a link button is the highest-
+# leverage UX we can ship safely.
+_ehr_link = ehr_building_url(b.ehr_code, b.kataster_no)
+if _ehr_link:
+    lc1, lc2, _ = st.columns([2, 2, 4])
+    lc1.link_button("🔗 Открыть на ehr.ee", _ehr_link, use_container_width=True)
+    if b.kataster_no:
+        lc2.link_button(
+            "🗺️ Maa-amet (по кадастру)",
+            f"https://geoportaal.maaamet.ee/est/Kaardirakendused/Kinnistu-otsing-p82.html?nupp=&otsing={b.kataster_no}",
+            use_container_width=True,
+        )
+else:
+    st.caption(
+        "💡 Введите EHR-код или kataster выше — появятся ссылки прямо на "
+        "страницы здания в ehr.ee и Maa-amet."
     )
 
 b.use_purpose = st.text_input(
@@ -226,7 +374,11 @@ b.fire_class = st.selectbox(
 )
 
 st.subheader("Проектировщик / строитель")
-st.caption("Если данные неизвестны (особенно для pre-2003 зданий) — оставьте пустым.")
+st.caption(
+    "Если данные неизвестны (особенно для pre-2003 зданий) — оставьте пустым. "
+    "Ссылка «🔎 Teatmik» открывает реестр предприятий в новой вкладке "
+    "(там можно проверить рег-код, адрес и статус)."
+)
 col1, col2 = st.columns(2)
 with col1:
     b.designer = st.text_input(
@@ -238,6 +390,10 @@ with col1:
             "Берётся из ehitusprojekti документации, если есть."
         ),
     ) or None
+    if b.designer:
+        link = teatmik_company_url(b.designer)
+        if link:
+            st.link_button("🔎 Teatmik (designer)", link, use_container_width=True)
 with col2:
     b.builder = st.text_input(
         "Builder (ehitaja)",
@@ -245,6 +401,10 @@ with col2:
         key=k("builder"),
         help="Кто строил здание (генподрядчик).",
     ) or None
+    if b.builder:
+        link = teatmik_company_url(b.builder)
+        if link:
+            st.link_button("🔎 Teatmik (builder)", link, use_container_width=True)
 
 if b.pre_2003:
     b.substitute_docs_note = st.text_area(

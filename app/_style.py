@@ -54,55 +54,60 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
     padding-right: 2rem;
 }}
 
-/* ---- Sidebar layout ---- */
+/* ---- Sidebar layout ----
+   Force the inner container (stSidebarContent) to be a full-height flex
+   column so the user-content area can grow to fill remaining vertical
+   space — that's what lets the footer's margin-top:auto reach the
+   viewport bottom. */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+}}
 
-/* Make the user-content area a flex column that fills the remaining space
-   below the logo + nav. Footer with margin-top:auto then pins to the
-   bottom; logout/usage stack at the top, just below the nav. */
+/* User-content area expands and lays out its children as a flex column. */
 section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
     display: flex !important;
     flex-direction: column !important;
     flex: 1 1 auto !important;
     min-height: 0 !important;
-    padding-top: 0.5rem !important;
+    padding-top: 1rem !important;
 }}
 
-/* Tighten the gap between nav and the logout/usage block. */
+/* Breathing room between the logo+nav block and the user content
+   (the usage block sat too close to "Правовая база"). */
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
-    margin-bottom: 0.25rem !important;
+    margin-bottom: 1rem !important;
 }}
 
-/* ---- Logo: fixed-square, centered ----
-   The SVG artwork is square (viewBox 800×800). st.logo() renders the image
-   either as <img> or as a div with background-image (varies by Streamlit
-   build), so we fix BOTH dimensions explicitly. Earlier attempts at
-   width:100% blew the logo up to overflow the nav; height:auto+max-height
-   collapsed the background-image variant to 0×0. */
+/* ---- Logo: fixed-square, flex-centered ----
+   Streamlit's testid is `stSidebarLogo` (NOT `stLogo` — earlier guess was
+   wrong, which is why the previous size rule never applied and the logo
+   rendered at Streamlit's default "large" size with the bottom cropped).
+   Some Streamlit builds render an <img>, others render a div with
+   background-image — cover both. */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
-    padding: 1rem 0.75rem 0.5rem 0.75rem !important;
-    text-align: center !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 1.5rem 0.5rem 1rem 0.5rem !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > a,
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > div {{
-    display: inline-block !important;
-    margin: 0 auto !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stLogo"] {{
-    height: 96px !important;
-    width: 96px !important;
+section[data-testid="stSidebar"] [data-testid="stSidebarLogo"] {{
+    height: 110px !important;
+    max-height: 110px !important;
+    width: 110px !important;
+    max-width: 110px !important;
     background-size: contain !important;
     background-position: center !important;
     background-repeat: no-repeat !important;
-    margin: 0 auto !important;
-    display: block !important;
     object-fit: contain !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
-    height: 96px !important;
+    height: 110px !important;
+    max-height: 110px !important;
     width: auto !important;
     max-width: 100% !important;
-    margin: 0 auto !important;
-    display: block !important;
     object-fit: contain !important;
 }}
 

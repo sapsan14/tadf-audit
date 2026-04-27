@@ -18,12 +18,14 @@ dependencies = [
   "anthropic>=0.40",
   "pdfplumber>=0.11",
   "streamlit-authenticator>=0.4",
+  "selectolax>=0.3",
 ]
 
 [dependency-groups]
 dev = [
   "pytest>=8.3",
   "ruff>=0.7",
+  "vcrpy>=6.0",
 ]
 sign = [
   "pyasice>=1.1",

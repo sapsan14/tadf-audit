@@ -284,6 +284,10 @@ jobs:
   deploy:
     name: Deploy application
     needs: [preflight, provision]
+    # Without `always()` the deploy job is skipped whenever `build` is
+    # skipped (skip_build=true), because GHA propagates "skipped" through
+    # the transitive needs chain even when this job doesn't list build.
+    if: ${{ always() && needs.preflight.result == 'success' && needs.provision.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       SERVER_IP: ${{ needs.provision.outputs.server_ip }}
@@ -379,6 +383,7 @@ jobs:
   smoke:
     name: Smoke tests
     needs: [provision, deploy]
+    if: ${{ always() && needs.provision.result == 'success' && needs.deploy.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       DOMAIN: tadf-audit.h2oatlas.ee
