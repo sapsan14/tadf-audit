@@ -24,11 +24,15 @@ from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.llm.extractor import diff as _extract_diff  # noqa: E402
 
 
-def _with_token_fragment(url: str, audit_id: int) -> str:
-    """Append `#tadf=<token>` to a URL so the in-browser helper can read it."""
+def _with_token_fragment(url: str, audit_id: int, *, target: str | None = None) -> str:
+    """Append `#tadf=<token>[&target=<slot>]` to a URL so the in-browser
+    helper can read both the auth token and which TADF form section the
+    auditor was on (so we can default the import target without showing
+    a picker)."""
     token = _issue_token(audit_id)
     sep = "&" if "#" in url else "#"
-    return f"{url}{sep}tadf={token}"
+    extra = f"&target={target}" if target else ""
+    return f"{url}{sep}tadf={token}{extra}"
 
 st.title("Здание (auditi objekt)")
 
@@ -83,11 +87,22 @@ if audit.id is not None:
     _imports = list_pending(audit.id)
     for imp in _imports:
         if imp.kind == "teatmik":
+            # target=client imports surface on the Новый аудит page where
+            # the client form lives; here we handle designer / builder /
+            # no-hint imports.
+            if imp.payload.get("target") == "client":
+                continue
             mapped = map_teatmik(imp.payload)
+            # The browser helper passes `target` based on which TADF form
+            # section the auditor was on (designer / builder / client).
+            # We default the picker to the hint and pre-fill the entire
+            # contact bundle on apply when target=client.
+            hinted_target = mapped.pop("target", None)
             with st.container(border=True):
                 st.markdown(
                     f"📥 **Импорт из Teatmik** — получено "
                     f"{imp.received_at.strftime('%H:%M:%S')}"
+                    + (f" → **{hinted_target}**" if hinted_target else "")
                 )
                 if imp.source_url:
                     st.caption(f"Источник: {imp.source_url}")
@@ -97,12 +112,16 @@ if audit.id is not None:
                     st.write("Найдено:")
                     for kfield, val in mapped.items():
                         st.write(f"- `{kfield}`: {val}")
-                # Teatmik can map to designer OR builder OR client.name —
-                # let the user pick.
-                tc1, tc2, tc3, tc4 = st.columns(4)
+
+                target_options = ["designer", "builder", "client"]
+                default_target = (
+                    hinted_target if hinted_target in target_options else "designer"
+                )
+                tc1, tc2, _tc3, tc4 = st.columns(4)
                 target = tc1.selectbox(
                     "Куда вставить",
-                    options=["designer", "builder", "client"],
+                    options=target_options,
+                    index=target_options.index(default_target),
                     key=f"imp_tm_target_{imp.id}",
                     label_visibility="collapsed",
                 )
@@ -123,6 +142,10 @@ if audit.id is not None:
                             audit.client.reg_code = mapped["reg_code"]
                         if mapped.get("address"):
                             audit.client.address = mapped["address"]
+                        if mapped.get("email"):
+                            audit.client.contact_email = mapped["email"]
+                        if mapped.get("phone"):
+                            audit.client.contact_phone = mapped["phone"]
                         set_current(audit)
                     mark_applied(imp.id)
                     st.rerun()
@@ -560,7 +583,7 @@ with col1:
         link = teatmik_company_url(b.designer)
         if link:
             if audit.id is not None:
-                link = _with_token_fragment(link, audit.id)
+                link = _with_token_fragment(link, audit.id, target="designer")
             st.link_button("🔎 Teatmik (designer)", link, use_container_width=True)
 with col2:
     b.builder = st.text_input(
@@ -573,7 +596,7 @@ with col2:
         link = teatmik_company_url(b.builder)
         if link:
             if audit.id is not None:
-                link = _with_token_fragment(link, audit.id)
+                link = _with_token_fragment(link, audit.id, target="builder")
             st.link_button("🔎 Teatmik (builder)", link, use_container_width=True)
 
 if b.pre_2003:

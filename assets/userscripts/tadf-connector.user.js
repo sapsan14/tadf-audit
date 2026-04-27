@@ -145,6 +145,27 @@
         });
     }
 
+    /* Teatmik personlegal pages render data as plain HTML tables with
+     * <table class="info"><tr><td>Label:</td><td>Value</td></tr></table>.
+     * Email + phone are also exposed via OpenGraph meta tags + mailto/tel
+     * links — those are the most reliable sources.
+     *
+     * Real DOM verified against TADF Ehitus OÜ (12503172) on 2026-04-27.
+     */
+
+    function scrapeMeta(prop) {
+        const el = document.querySelector('meta[property="' + prop + '"]');
+        return el ? (el.getAttribute('content') || '').trim() || null : null;
+    }
+    function scrapeMailto() {
+        const a = document.querySelector('a[href^="mailto:"]');
+        return a ? a.getAttribute('href').slice(7).trim() || null : null;
+    }
+    function scrapeTel() {
+        const a = document.querySelector('a[href^="tel:"]');
+        return a ? a.getAttribute('href').slice(4).trim() || null : null;
+    }
+
     function scrapeText(selectors) {
         for (const sel of selectors) {
             const el = document.querySelector(sel);
@@ -153,14 +174,22 @@
         return null;
     }
 
-    function scrapeLabelled(labels) {
-        const all = document.querySelectorAll('dt, th, .label, label');
-        for (const el of all) {
-            const text = (el.textContent || '').trim().toLowerCase();
-            for (const lbl of labels) {
-                if (text.includes(lbl)) {
-                    const sib = el.nextElementSibling;
-                    if (sib && sib.textContent.trim()) return sib.textContent.trim();
+    /* Find a `<td>Label:</td><td>Value</td>` pair and return the value.
+     * Strips icons (so the cell text "<icon> Aadress:" matches "Aadress").
+     */
+    function scrapeTableField(labels) {
+        const lowerLabels = labels.map(s => s.toLowerCase().replace(/:$/, ''));
+        for (const td of document.querySelectorAll('td')) {
+            // Strip any embedded icon text (Font Awesome adds none, but be safe)
+            let text = (td.textContent || '').trim().toLowerCase()
+                .replace(/[:.\s]+$/, '').replace(/\s+/g, ' ');
+            for (const lbl of lowerLabels) {
+                if (text === lbl) {
+                    const nextTd = td.nextElementSibling;
+                    if (nextTd && nextTd.tagName === 'TD') {
+                        const v = (nextTd.textContent || '').trim().replace(/\s+/g, ' ');
+                        if (v.length >= 1 && v.length < 400) return v;
+                    }
                 }
             }
         }
@@ -177,10 +206,27 @@
     }
     if (!getToken()) return;
 
+    // The TADF link button may include a `target` hint in the URL fragment
+    // (`#tadf=…&target=client|designer|builder`) so we know which form
+    // section the auditor was on when they triggered the search.
+    function readTargetHint() {
+        const hash = (window.location.hash || '').replace(/^#/, '');
+        for (const part of hash.split('&')) {
+            const [k, v] = part.split('=');
+            if (k === 'target' && v) return decodeURIComponent(v);
+        }
+        return null;
+    }
+
     postToTadf({
         reg_code: m[1],
-        name: scrapeText(['h1', 'h2', '.company-name', '[data-testid="company-name"]']),
-        address: scrapeLabelled(['aadress', 'адрес']),
-        status: scrapeLabelled(['staatus', 'статус', 'state']),
+        name: scrapeText(['h1', 'h2', '.company-name']),
+        address: scrapeTableField(['Aadress']),
+        status: scrapeTableField(['Seisund']),
+        email: scrapeMeta('business:contact_data:email') || scrapeMailto(),
+        phone: scrapeMeta('business:contact_data:phone_number') || scrapeTel(),
+        legal_form: scrapeTableField(['Õiguslik vorm']),
+        capital: scrapeTableField(['Kapital']),
+        target: readTargetHint(),
     });
 })();

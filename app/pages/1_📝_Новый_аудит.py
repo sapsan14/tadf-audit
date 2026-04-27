@@ -12,6 +12,12 @@ from datetime import date  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app._state import all_saved_audits, get_current, reload_from_db, set_current  # noqa: E402
+from tadf.api.imports import (  # noqa: E402
+    list_pending,
+    map_teatmik,
+    mark_applied,
+    mark_rejected,
+)
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.external.links import teatmik_company_url  # noqa: E402
 from tadf.models import Auditor  # noqa: E402
@@ -235,9 +241,10 @@ audit.client.address = st.text_input(
     help="Адрес для переписки с заказчиком (может отличаться от адреса объекта).",
 ) or None
 
-# Teatmik deep-link. If the audit is saved (audit.id), embed the per-audit
-# import token so the in-browser helper (bookmarklet / Tampermonkey
-# userscript) auto-fills client.name/reg_code/address back here.
+# Teatmik deep-link. The URL fragment includes target=client so the
+# in-browser helper sends a hint, and we apply directly to the client
+# bundle (name + reg_code + address + email + phone) without showing the
+# designer/builder/client picker on the Здание page.
 _tk_query = audit.client.reg_code or audit.client.name
 if _tk_query and _tk_query.strip():
     link = teatmik_company_url(_tk_query)
@@ -245,7 +252,7 @@ if _tk_query and _tk_query.strip():
         if audit.id is not None:
             token = _issue_token(audit.id)
             sep = "&" if "#" in link else "#"
-            link = f"{link}{sep}tadf={token}"
+            link = f"{link}{sep}tadf={token}&target=client"
             label = "🔎 Найти в Teatmik (авто-импорт)"
         else:
             label = "🔎 Найти в Teatmik (без авто-импорта — сохрани аудит)"
@@ -254,6 +261,60 @@ if _tk_query and _tk_query.strip():
             "💡 Импорт работает после установки bookmarklet / Tampermonkey — "
             "см. страницу **🔌 Подключения**."
         )
+
+# ---------------------------------------------------------------------------
+# 📥 Pending imports from Teatmik bookmarklet/userscript with target=client.
+# Shown on this page so the auditor sees the result where they triggered it.
+# Other targets (designer/builder) live on the Здание page.
+# ---------------------------------------------------------------------------
+if audit.id is not None:
+    _client_imports = [
+        imp for imp in list_pending(audit.id)
+        if imp.kind == "teatmik" and imp.payload.get("target") == "client"
+    ]
+    for imp in _client_imports:
+        mapped = map_teatmik(imp.payload)
+        mapped.pop("target", None)
+        with st.container(border=True):
+            st.markdown(
+                f"📥 **Импорт из Teatmik → клиент** — "
+                f"{imp.received_at.strftime('%H:%M:%S')}"
+            )
+            if imp.source_url:
+                st.caption(f"Источник: {imp.source_url}")
+            if not mapped:
+                st.warning("Пустая карточка компании.")
+            else:
+                st.write("Найдено:")
+                for kfield, val in mapped.items():
+                    st.write(f"- `{kfield}`: {val}")
+            ca, cr = st.columns([1, 1])
+            if ca.button("✅ Применить к клиенту", type="primary", key=f"imp_client_apply_{imp.id}"):
+                if audit.client is None:
+                    from tadf.models import Client as _Client
+                    audit.client = _Client(name="")
+                if mapped.get("name"):
+                    audit.client.name = mapped["name"]
+                if mapped.get("reg_code"):
+                    audit.client.reg_code = mapped["reg_code"]
+                if mapped.get("address"):
+                    audit.client.address = mapped["address"]
+                if mapped.get("email"):
+                    audit.client.contact_email = mapped["email"]
+                if mapped.get("phone"):
+                    audit.client.contact_phone = mapped["phone"]
+                set_current(audit)
+                # Pop widget keys so client form re-seeds from new model values.
+                for w in (
+                    k("client_name"), k("client_reg"), k("client_email"),
+                    k("client_phone"), k("client_addr"),
+                ):
+                    st.session_state.pop(w, None)
+                mark_applied(imp.id)
+                st.rerun()
+            if cr.button("❌ Отклонить", key=f"imp_client_reject_{imp.id}"):
+                mark_rejected(imp.id)
+                st.rerun()
 
 set_current(audit)
 st.success(f"Текущий номер: **{audit.display_no()}** ({audit.type} / {audit.subtype})")
