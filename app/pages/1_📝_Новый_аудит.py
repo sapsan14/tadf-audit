@@ -16,7 +16,9 @@ from app._state import (  # noqa: E402
     delete_audit_by_id,
     ensure_draft_saved,
     get_current,
+    list_audit_snapshots,
     reload_from_db,
+    restore_audit_snapshot,
     set_current,
     start_new_draft,
 )
@@ -118,6 +120,36 @@ with st.container(border=True):
                     ):
                         st.session_state[pending_key] = True
                         st.rerun()
+
+                # 🕘 History — show last 30 snapshots; click any version
+                # to restore. Auto-save writes a fresh snapshot on every
+                # meaningful state change, so this list is the auditor's
+                # safety net against accidental edits.
+                snaps = list_audit_snapshots(d.id)
+                if snaps:
+                    with st.expander(f"🕘 История ({len(snaps)})", expanded=False):
+                        st.caption(
+                            "Каждая запись — снимок состояния на момент авто-сохранения. "
+                            "Нажмите «Восстановить», чтобы откатиться (можно потом откатить откат — "
+                            "сам restore тоже создаёт новую запись)."
+                        )
+                        for snap_id, version_no, created_at in snaps:
+                            sc1, sc2, sc3 = st.columns([2, 4, 2])
+                            sc1.markdown(f"**v{version_no}**")
+                            sc2.markdown(
+                                f"<small>{created_at.strftime('%Y-%m-%d %H:%M:%S')}</small>",
+                                unsafe_allow_html=True,
+                            )
+                            if sc3.button(
+                                "↩️ Восстановить",
+                                key=f"snap_restore_{d.id}_{snap_id}",
+                                use_container_width=True,
+                            ):
+                                if restore_audit_snapshot(snap_id):
+                                    st.success(f"Восстановлен v{version_no}")
+                                    st.rerun()
+                                else:
+                                    st.error("Не удалось восстановить (повреждённый снимок)")
 
 audit = get_current()
 scope = audit.id or "new"

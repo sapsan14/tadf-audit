@@ -132,6 +132,33 @@ class PhotoRow(Base):
     audit: Mapped[AuditRow] = relationship(back_populates="photos")
 
 
+class AuditSnapshotRow(Base):
+    """A point-in-time JSON dump of an Audit, written every time
+    `ensure_draft_saved` actually writes (i.e. on real state changes).
+
+    Lets the auditor:
+      - see when each draft was last touched
+      - undo accidental edits by restoring an earlier snapshot
+      - audit the chain of changes (compliance / reproducibility)
+
+    Capped at the last 30 versions per audit by `repo.save_snapshot`
+    so a long-running draft doesn't bloat the DB. JSON is the same
+    shape `audit.model_dump_json()` produces — restoring is a
+    `Audit.model_validate_json` round-trip.
+    """
+
+    __tablename__ = "audit_snapshot"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    audit_id: Mapped[int] = mapped_column(
+        ForeignKey("audit.id", ondelete="CASCADE"), index=True
+    )
+    version_no: Mapped[int] = mapped_column(Integer)
+    snapshot_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+
 class PendingImportRow(Base):
     """One row per inbound import from the bookmarklet / Tampermonkey
     userscript. The Streamlit UI polls this table on every page rerun and
