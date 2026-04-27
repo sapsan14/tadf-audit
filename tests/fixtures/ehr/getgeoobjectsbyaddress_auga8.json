@@ -1,0 +1,213 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            727985.63,
+            6596626.42
+          ],
+          [
+            727990,
+            6596631.46
+          ],
+          [
+            727983.68,
+            6596636.94
+          ],
+          [
+            727972.12,
+            6596623.6
+          ],
+          [
+            727976.11,
+            6596620.13
+          ],
+          [
+            727978.2,
+            6596622.54
+          ],
+          [
+            727980.53,
+            6596620.53
+          ],
+          [
+            727985.63,
+            6596626.42
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "object_type": "EHR_KOOD",
+      "object_code": "118007554",
+      "object_address": "Ida-Viru maakond, Narva-Jõesuu linn, Narva-Jõesuu linn, Auga tn 8",
+      "object_name": "Eramu (Katusekorrusega)",
+      "ads_oid": "EE01020403",
+      "kaos_id_peamine": "11101",
+      "aadr_id": [
+        "6672609"
+      ],
+      "adrid": null,
+      "object_status": "EHITIS_SEISUND_OLEMA",
+      "ET": "Hoone 118007554 (Eramu (Katusekorrusega)): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "EN": "Building 118007554 (Eramu (Katusekorrusega)): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "RU": "Здание 118007554 (Eramu (Katusekorrusega)): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            727976.37,
+            6596633.87
+          ],
+          [
+            727972.75,
+            6596637.13
+          ],
+          [
+            727966.65,
+            6596630.38
+          ],
+          [
+            727970.27,
+            6596627.11
+          ],
+          [
+            727976.37,
+            6596633.87
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "object_type": "EHR_KOOD",
+      "object_code": "118007702",
+      "object_address": "Ida-Viru maakond, Narva-Jõesuu linn, Narva-Jõesuu linn, Auga tn 8",
+      "object_name": "Garaaž",
+      "ads_oid": "ME01020522",
+      "kaos_id_peamine": "30036",
+      "aadr_id": [
+        "6672609"
+      ],
+      "adrid": null,
+      "object_status": "EHITIS_SEISUND_OLEMA",
+      "ET": "Hoone 118007702 (Garaaž): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "EN": "Building 118007702 (Garaaž): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "RU": "Здание 118007702 (Garaaž): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            727998.39,
+            6596663.22
+          ],
+          [
+            727992.45,
+            6596667.08
+          ],
+          [
+            727984.02,
+            6596654.12
+          ],
+          [
+            727989.96,
+            6596650.26
+          ],
+          [
+            727998.39,
+            6596663.22
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "object_type": "EHR_KOOD",
+      "object_code": "120195317",
+      "object_address": "Ida-Viru maakond, Narva-Jõesuu linn, Narva-Jõesuu linn, Auga tn 8",
+      "object_name": "Saun",
+      "ads_oid": "ME01068514",
+      "kaos_id_peamine": "30015",
+      "aadr_id": [
+        "6672609"
+      ],
+      "adrid": null,
+      "object_status": "EHITIS_SEISUND_KAVAN",
+      "ET": "Hoone 120195317 (Saun): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "EN": "Building 120195317 (Saun): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "RU": "Здание 120195317 (Saun): Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "crs": {
+        "type": "name",
+        "properties": {
+          "name": "EPSG:3301"
+        }
+      },
+      "coordinates": [
+        [
+          [
+            727987.99,
+            6596629.39
+          ],
+          [
+            728006.44,
+            6596657.58
+          ],
+          [
+            727992.27,
+            6596667.86
+          ],
+          [
+            727979.63,
+            6596647.75
+          ],
+          [
+            727963.61,
+            6596627.84
+          ],
+          [
+            727975.57,
+            6596616.37
+          ],
+          [
+            727987.99,
+            6596629.39
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "object_type": "KAYK",
+      "object_code": "51301:010:0007",
+      "object_address": "Ida-Viru maakond, Narva-Jõesuu linn, Narva-Jõesuu linn, Auga tn 8",
+      "object_name": "Katastriüksus",
+      "ads_oid": "CU00277209",
+      "kaos_id_peamine": null,
+      "aadr_id": [
+        "5138454",
+        "6672609"
+      ],
+      "adrid": null,
+      "object_status": null,
+      "ET": "Katastriüksus 51301:010:0007: Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "EN": "Cadastral 51301:010:0007: Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond",
+      "RU": "Kадастр 51301:010:0007: Auga tn 8, Narva-Jõesuu linn, Narva-Jõesuu linn, Ida-Viru maakond"
+    }
+  }
+]

@@ -1,0 +1,902 @@
+{
+  "ehitis": {
+    "ehitiseKujud": {
+      "ruumikuju": [
+        {
+          "oper": "U",
+          "adobId": "11220002",
+          "adsOid": "EE00685427",
+          "nahtus": "HOONE",
+          "adsLiik": "EE",
+          "ehit_id": "31476064",
+          "ehrKood": "102032773",
+          "kujuJnr": "1",
+          "nimetus": "Suvila",
+          "pindala": "95.0",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  713103.86,
+                  6589044.64
+                ],
+                [
+                  713104.01,
+                  6589040.74
+                ],
+                [
+                  713107.18,
+                  6589040.86
+                ],
+                [
+                  713106.7,
+                  6589053.67
+                ],
+                [
+                  713103.53,
+                  6589053.55
+                ],
+                [
+                  713097.41,
+                  6589053.32
+                ],
+                [
+                  713097.74,
+                  6589044.41
+                ],
+                [
+                  713103.86,
+                  6589044.64
+                ]
+              ]
+            ]
+          },
+          "gis_kood": null,
+          "kuju_liik": null,
+          "nahtusTxt": "hoone",
+          "mkm_joonis": null,
+          "nliik_kood": null,
+          "geometryTxt": "Geomeetria punktid on geomeetria objektis",
+          "lahiaadress": "Linna AÜ 1062",
+          "taisaadress": "Ida-Viru maakond, Sillamäe linn, Linna AÜ 1062",
+          "viitepunktX": "6589049.04",
+          "viitepunktY": "713102.30",
+          "date_updated": "2026-04-15T06:47:30.772",
+          "geom_updated": "2026-04-15T06:47:30.772",
+          "geometryType": "Geomeetria tüüp on geomeetria objektis",
+          "ads_esitamine": "ADS_ESITATUD",
+          "hoone_kuju_id": "30587786",
+          "tyhistatud_kp": null,
+          "geometryTypeTxt": "Geomeetria tüüp on geomeetria objektis",
+          "sissepaasu_punkt": null,
+          "kujuMoodustusviis": "K",
+          "sissepaasupunktid": {
+            "sissepaasupunkt": [
+              {
+                "id": "24908262",
+                "nimi": "ADS süsteemist loetud",
+                "oper": "A",
+                "kuju_id": "30587786",
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [
+                    713100.64,
+                    6589048.98
+                  ]
+                },
+                "date_created": "2026-04-15T06:47:30.745",
+                "date_updated": "2026-04-15T06:47:30.745",
+                "viitepunkt_x": "6589048.98",
+                "viitepunkt_y": "713100.64",
+                "moodustusviis": "S",
+                "eh_sp_punkt_id": "267625"
+              },
+              {
+                "id": "24908263",
+                "nimi": "arvutatud kuju keskmesse",
+                "oper": "A",
+                "kuju_id": "30587786",
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [
+                    713100.635,
+                    6589048.98
+                  ]
+                },
+                "date_created": "2026-04-15T06:47:30.745",
+                "date_updated": "2026-04-15T06:47:30.745",
+                "viitepunkt_x": "713100.63",
+                "viitepunkt_y": "6589048.98",
+                "moodustusviis": "K",
+                "eh_sp_punkt_id": null
+              },
+              {
+                "id": "24908264",
+                "nimi": "arvutatud kuju keskmesse",
+                "oper": "A",
+                "kuju_id": "30587786",
+                "geometry": {
+                  "type": "Point",
+                  "coordinates": [
+                    713100.635,
+                    6589048.98
+                  ]
+                },
+                "date_created": "2026-04-15T06:47:30.745",
+                "date_updated": "2026-04-15T06:47:30.745",
+                "viitepunkt_x": "713100.63",
+                "viitepunkt_y": "6589048.98",
+                "moodustusviis": "K",
+                "eh_sp_punkt_id": null
+              }
+            ]
+          },
+          "ehitiseKujuAadressid": {
+            "aadress": [
+              {
+                "id": "43821968",
+                "olek": "K",
+                "oper": "A",
+                "adrId": "3674501",
+                "tekst": null,
+                "aadr_id": "6687116",
+                "kuju_id": "30587786",
+                "olekTxt": "kehtiv",
+                "tase1_id": "7430900",
+                "tase2_id": "11080953",
+                "tase3_id": null,
+                "tase4_id": "11081615",
+                "tase5_id": null,
+                "tase6_id": null,
+                "tase7_id": "11087870",
+                "tase8_id": null,
+                "tase1_kood": "45",
+                "tase2_kood": "736",
+                "koodaadress": "4573600002DQT00000000D1VH00000000",
+                "lahiaadress": "Linna AÜ 1062",
+                "taisaadress": "Ida-Viru maakond, Sillamäe linn, Linna AÜ 1062",
+                "tase1_nimetus": "Ida-Viru maakond",
+                "tase2_nimetus": "Sillamäe linn",
+                "tase3_nimetus": null,
+                "tase4_nimetus": "Linna AÜ",
+                "tase5_nimetus": null,
+                "tase6_nimetus": null,
+                "tase7_nimetus": "1062",
+                "tase8_nimetus": null,
+                "aadressTekstina": null
+              }
+            ]
+          },
+          "kujuMoodustusviisTxt": "kaardistatud"
+        }
+      ]
+    },
+    "ehitiseAndmed": {
+      "url": "URL pole kasutusel",
+      "oper": "A",
+      "adsOid": null,
+      "ehitId": "31476064",
+      "ehrKood": "102032773",
+      "nimetus": "Suvila",
+      "seisund": "EHITIS_SEISUND_OLEMA",
+      "kaosKood": "11103",
+      "markused": null,
+      "kaosIdTxt": "Suvila, aiamaja",
+      "seisundTxt": "Olemas",
+      "verTekkAeg": "2026-04-15T06:47:31.049",
+      "taisaadress": "Ida-Viru maakond, Sillamäe linn, Linna AÜ 1062",
+      "rajatisHoone": "H",
+      "esmaneKasutus": null,
+      "kaosIdPeamine": "11103",
+      "katastriyksused": "katastriuksused on eraldi plokis",
+      "rajatishoonetxt": "hoone"
+    },
+    "ehitiseKehand": {
+      "kehand": [
+        {
+          "tekkeviis": "P",
+          "kehandOper": "A",
+          "ehitiseOsad": {
+            "ehitiseOsa": [
+              {
+                "id": "29107688",
+                "liik": "K",
+                "tahis": null,
+                "adsOid": null,
+                "kaosId": "11103",
+                "adob_id": null,
+                "ehrKood": "102032773-2562860",
+                "liikTxt": "Eluruum",
+                "nimetus": null,
+                "osaOper": "A",
+                "spun_id": "24908264",
+                "kaosKood": "11103",
+                "markused": null,
+                "osa_kood": "2562860",
+                "dokumendil": "i",
+                "osaUpdated": "2026-04-15T06:47:30.748",
+                "kaosNimetus": "Suvila, aiamaja",
+                "ads_esitamine": null,
+                "ehitiseOsaPohiandmed": {
+                  "kook": "0",
+                  "pind": "80.6",
+                  "kooginish": "1",
+                  "tubadeArv": "2",
+                  "koetavPind": "56.6",
+                  "toatemp_pind": "56.6",
+                  "valipindadePind": "9.6",
+                  "sissepaasuKorrus": "1"
+                },
+                "ehitiseOsaTehnosysteemid": {
+                  "energiaTehnosysteem": [
+                    {
+                      "nimetus": "Ventilatsiooni liik",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107688",
+                      "energiakandjaId": "2602",
+                      "enTehnosysteemId": "11597759",
+                      "energiaallikaLiikId": "2703",
+                      "energiakandjaNimetus": "puudub",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_VENT",
+                      "energiaallikaLiikNimetus": "loomulik ventilatsioon",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Majapidamisgaasi liik",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107688",
+                      "energiakandjaId": "2602",
+                      "enTehnosysteemId": "11597760",
+                      "energiaallikaLiikId": "20402",
+                      "energiakandjaNimetus": "puudub",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_MAJAPIDAMISGAAS",
+                      "energiaallikaLiikNimetus": "puudub",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "võrk",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107688",
+                      "energiakandjaId": "2607",
+                      "enTehnosysteemId": "9803896",
+                      "energiaallikaLiikId": "2303",
+                      "energiakandjaNimetus": "elekter",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_ELEKLIIK",
+                      "energiaallikaLiikNimetus": "võrk",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Soojusallikas",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107688",
+                      "energiakandjaId": "2607",
+                      "enTehnosysteemId": "11597757",
+                      "energiaallikaLiikId": "2520",
+                      "energiakandjaNimetus": "elekter",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_SOOJUSA",
+                      "energiaallikaLiikNimetus": "õhk-õhk soojuspump",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Jahutusallika liik",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107688",
+                      "energiakandjaId": "2607",
+                      "enTehnosysteemId": "11597758",
+                      "energiaallikaLiikId": "20103",
+                      "energiakandjaNimetus": "elekter",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_JAHUTUSA",
+                      "energiaallikaLiikNimetus": "kompressorjahutus",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Soojusallikas",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107688",
+                      "energiakandjaId": "2617",
+                      "enTehnosysteemId": "11597756",
+                      "energiaallikaLiikId": "2507",
+                      "energiakandjaNimetus": "segapuit",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_SOOJUSA",
+                      "energiaallikaLiikNimetus": "ahi, kamin, pliit",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    }
+                  ]
+                },
+                "ehitiseOsaTehnilisedNaitajad": {
+                  "tehnilineNaitaja": [
+                    {
+                      "oper": "A",
+                      "jrkNr": "20",
+                      "klKood": "TEHNO_VESI",
+                      "tenaId": "1102",
+                      "ehos_id": "29107688",
+                      "nimetus": "puudub",
+                      "klNimetus": "Veevarustuse liik",
+                      "lisavaartus": null
+                    },
+                    {
+                      "oper": "A",
+                      "jrkNr": "30",
+                      "klKood": "TEHNO_KANAL",
+                      "tenaId": "1405",
+                      "ehos_id": "29107688",
+                      "nimetus": "lokaalne, mahuti",
+                      "klNimetus": "Kanalisatsiooni liik",
+                      "lisavaartus": null
+                    },
+                    {
+                      "oper": "A",
+                      "jrkNr": "10",
+                      "klKood": "TEHNO_WC",
+                      "tenaId": "2002",
+                      "ehos_id": "29107688",
+                      "nimetus": "vesiklosett",
+                      "klNimetus": "Info tualettide kohta",
+                      "lisavaartus": null
+                    },
+                    {
+                      "oper": "A",
+                      "jrkNr": "20",
+                      "klKood": "TEHNO_OPESU",
+                      "tenaId": "1203",
+                      "ehos_id": "29107688",
+                      "nimetus": "vann/dušš",
+                      "klNimetus": "Info pesemisvõimaluse kohta",
+                      "lisavaartus": null
+                    },
+                    {
+                      "oper": "A",
+                      "jrkNr": "20",
+                      "klKood": "TEHNO_OPESU",
+                      "tenaId": "1204",
+                      "ehos_id": "29107688",
+                      "nimetus": "saun",
+                      "klNimetus": "Info pesemisvõimaluse kohta",
+                      "lisavaartus": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "29107689",
+                "liik": "M",
+                "tahis": null,
+                "adsOid": null,
+                "kaosId": "30015",
+                "adob_id": null,
+                "ehrKood": "102032773-4403550",
+                "liikTxt": "Mitteeluruum",
+                "nimetus": "kuur",
+                "osaOper": "A",
+                "spun_id": "24908263",
+                "kaosKood": "12744",
+                "markused": null,
+                "osa_kood": "4403550",
+                "dokumendil": "i",
+                "osaUpdated": "2026-04-15T06:47:30.748",
+                "kaosNimetus": "Elamu, kooli vms abihoone",
+                "ads_esitamine": null,
+                "ehitiseOsaPohiandmed": {
+                  "pind": "24.1",
+                  "tubadeArv": "1",
+                  "koetavPind": "0.0",
+                  "toatemp_pind": "0.0",
+                  "valipindadePind": "0.0",
+                  "sissepaasuKorrus": "1"
+                },
+                "ehitiseOsaTehnosysteemid": {
+                  "energiaTehnosysteem": [
+                    {
+                      "nimetus": "Jahutusallika liik",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107689",
+                      "energiakandjaId": "2602",
+                      "enTehnosysteemId": "11097201",
+                      "energiaallikaLiikId": "20102",
+                      "energiakandjaNimetus": "puudub",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_JAHUTUSA",
+                      "energiaallikaLiikNimetus": "puudub",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Majapidamisgaasi liik",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107689",
+                      "energiakandjaId": "2602",
+                      "enTehnosysteemId": "11097202",
+                      "energiaallikaLiikId": "20402",
+                      "energiakandjaNimetus": "puudub",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_MAJAPIDAMISGAAS",
+                      "energiaallikaLiikNimetus": "puudub",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Ventilatsiooni liik",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107689",
+                      "energiakandjaId": "2602",
+                      "enTehnosysteemId": "11097203",
+                      "energiaallikaLiikId": "2703",
+                      "energiakandjaNimetus": "puudub",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_VENT",
+                      "energiaallikaLiikNimetus": "loomulik ventilatsioon",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Soojusallikas",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107689",
+                      "energiakandjaId": "2602",
+                      "enTehnosysteemId": "11606632",
+                      "energiaallikaLiikId": "2502",
+                      "energiakandjaNimetus": "puudub",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_SOOJUSA",
+                      "energiaallikaLiikNimetus": "puudub",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    },
+                    {
+                      "nimetus": "Elektrisüsteemi liik",
+                      "lisavaartus": null,
+                      "doEhitisOsaId": "29107689",
+                      "energiakandjaId": "2607",
+                      "enTehnosysteemId": "11097200",
+                      "energiaallikaLiikId": "2303",
+                      "energiakandjaNimetus": "elekter",
+                      "energiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikId": null,
+                      "energiaTehnosysteemiLiik": "TEHNO_ELEKLIIK",
+                      "energiaallikaLiikNimetus": "võrk",
+                      "energiaallikaLiikVoimsus": null,
+                      "lisaEnergiaallikaLiikKogus": null,
+                      "lisaEnergiaallikaLiikVoimsus": null
+                    }
+                  ]
+                },
+                "ehitiseOsaTehnilisedNaitajad": {
+                  "tehnilineNaitaja": [
+                    {
+                      "oper": "A",
+                      "jrkNr": "20",
+                      "klKood": "TEHNO_VESI",
+                      "tenaId": "1102",
+                      "ehos_id": "29107689",
+                      "nimetus": "puudub",
+                      "klNimetus": "Veevarustuse liik",
+                      "lisavaartus": null
+                    },
+                    {
+                      "oper": "A",
+                      "jrkNr": "30",
+                      "klKood": "TEHNO_KANAL",
+                      "tenaId": "1402",
+                      "ehos_id": "29107689",
+                      "nimetus": "puudub",
+                      "klNimetus": "Kanalisatsiooni liik",
+                      "lisavaartus": null
+                    },
+                    {
+                      "oper": "A",
+                      "jrkNr": "10",
+                      "klKood": "TEHNO_WC",
+                      "tenaId": "2001",
+                      "ehos_id": "29107689",
+                      "nimetus": "puudub",
+                      "klNimetus": "Info tualettide kohta",
+                      "lisavaartus": null
+                    },
+                    {
+                      "oper": "A",
+                      "jrkNr": "20",
+                      "klKood": "TEHNO_OPESU",
+                      "tenaId": "1202",
+                      "ehos_id": "29107689",
+                      "nimetus": "puudub",
+                      "klNimetus": "Info pesemisvõimaluse kohta",
+                      "lisavaartus": null
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "hoone_kuju_id": "30587786",
+          "kehandUpdated": "2026-04-15T06:47:30.746",
+          "esmane_kasutus": "1999",
+          "do_ehitis_kehand_id": "13528141"
+        }
+      ]
+    },
+    "ehitiseAadressid": {
+      "aadress": [
+        {
+          "oper": "A",
+          "adrId": "3674501",
+          "olekviit": {
+            "olek": "K",
+            "olekTxt": "kehtiv"
+          },
+          "koodaadress": "4573600002DQT00000000D1VH00000000",
+          "lahiaadress": "Linna AÜ 1062",
+          "taisaadress": "Ida-Viru maakond, Sillamäe linn, Linna AÜ 1062",
+          "aadressTekstina": null
+        }
+      ]
+    },
+    "ehitisePohiandmed": {
+      "lift": "0",
+      "laius": "9.0",
+      "korgus": "7.0",
+      "pikkus": "12.5",
+      "maakond": "45",
+      "kinavald": null,
+      "ehAlustKp": "1988-07-01T00:00:00.000",
+      "mahtBruto": "142.0",
+      "oletuslik": "0",
+      "tubadeArv": "1",
+      "abs0Korgus": "38.0",
+      "koetavPind": "56.6",
+      "omandiLiik": "EHITIS_OMANDI_LIIK_KINNIS",
+      "omavalitsus": "515",
+      "kavKasutusKp": "1999-01-01T00:00:00.000",
+      "toatemp_pind": "56.6",
+      "omandiLiikTxt": "kinnisasi",
+      "vetteEhitatud": null,
+      "yldkasut_pind": "0",
+      "abiruumidePind": "0",
+      "ajehKasutalgKp": null,
+      "maxKorrusteArv": "2",
+      "ajehKasutloppKp": null,
+      "ehitisalunePind": "103.0",
+      "suletud_netopind": "104.7",
+      "mitteeluruumideArv": "0",
+      "soltumatuVallasAsi": null,
+      "ehitisaluneMaapealnePind": "103.0"
+    },
+    "ehitiseEnergiamargised": {
+      "energiamargis": []
+    },
+    "ehitiseKatastriyksused": {
+      "ehitiseKatastriyksus": [
+        {
+          "id": "43482814",
+          "olek": "K",
+          "oper": "A",
+          "adob_id": 10629013,
+          "ads_oid": "CU00529060",
+          "kayk_id": "344299",
+          "kontrKp": null,
+          "lahiaadress": "Linna AÜ 1062",
+          "taisaadress": "Ida-Viru maakond, Sillamäe linn, Linna AÜ 1062",
+          "katastritunnus": "85101:004:0020",
+          "seostamiseViis": null
+        }
+      ]
+    },
+    "ehitiseKasutusotstarbed": {
+      "kasutusotstarve": [
+        {
+          "oper": "A",
+          "kaosId": "11103",
+          "ehos_id": "29107688",
+          "kaosKood": "11103",
+          "kaosIdTxt": "Suvila, aiamaja",
+          "eluruumidePind": null,
+          "mitteeluruumidePind": null
+        },
+        {
+          "oper": "A",
+          "kaosId": "30015",
+          "ehos_id": null,
+          "kaosKood": "12744",
+          "kaosIdTxt": "Elamu, kooli vms abihoone",
+          "eluruumidePind": "0.0",
+          "mitteeluruumidePind": "24.1"
+        },
+        {
+          "oper": "A",
+          "kaosId": "30015",
+          "ehos_id": "29107689",
+          "kaosKood": "12744",
+          "kaosIdTxt": "Elamu, kooli vms abihoone",
+          "eluruumidePind": null,
+          "mitteeluruumidePind": null
+        },
+        {
+          "oper": "A",
+          "kaosId": "11103",
+          "ehos_id": null,
+          "kaosKood": "11103",
+          "kaosIdTxt": "Suvila, aiamaja",
+          "eluruumidePind": "80.6",
+          "mitteeluruumidePind": null
+        }
+      ]
+    },
+    "ehitiseTehnilisedNaitajad": {
+      "tehnilineNaitaja": [
+        {
+          "oper": "A",
+          "jrkNr": "5",
+          "klKood": "KONS_SARIKAD",
+          "tenaId": "907",
+          "nimetus": "puit",
+          "klNimetus": "Katuste ja katuselagede kandva osa materjal",
+          "eh_tehna_id": "56281823",
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "50",
+          "klKood": "TEHNO_SOOJUSA",
+          "tenaId": "2507",
+          "nimetus": "ahi, kamin, pliit",
+          "klNimetus": "Soojusallikas",
+          "eh_tehna_id": "55871387",
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "10",
+          "klKood": "TEHNO_ELEKLIIK",
+          "tenaId": "2303",
+          "nimetus": "võrk",
+          "klNimetus": "Elektrisüsteemi liik",
+          "eh_tehna_id": "4788318",
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "0",
+          "klKood": "KONS_VUND",
+          "tenaId": "103",
+          "nimetus": "madalvundament",
+          "klNimetus": "Vundamendi liik",
+          "eh_tehna_id": "4788294",
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "1",
+          "klKood": "KONS_KKONSTR",
+          "tenaId": "218",
+          "nimetus": "tellis",
+          "klNimetus": "Kande- ja jäigastavate konstruktsioonide materjal",
+          "eh_tehna_id": "4788296",
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "6",
+          "klKood": "KONS_VLAED",
+          "tenaId": "407",
+          "nimetus": "puit",
+          "klNimetus": "Vahelagede kandva osa materjal",
+          "eh_tehna_id": "4788298",
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "3",
+          "klKood": "KONS_VALISV",
+          "tenaId": "703",
+          "nimetus": "krohv",
+          "klNimetus": "Välisseina välisviimistluse materjal",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "50",
+          "klKood": "TEHNO_SOOJUSA",
+          "tenaId": "2508",
+          "nimetus": "elektriotseküte",
+          "klNimetus": "Soojusallikas",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "70",
+          "klKood": "TEHNO_VENT",
+          "tenaId": "2703",
+          "nimetus": "loomulik ventilatsioon",
+          "klNimetus": "Ventilatsiooni liik",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "83",
+          "klKood": "TEHNO_JAHUTUSA",
+          "tenaId": "20102",
+          "nimetus": "puudub",
+          "klNimetus": "Jahutusallika liik",
+          "eh_tehna_id": null,
+          "lisavaartus": "null"
+        },
+        {
+          "oper": "A",
+          "jrkNr": "50",
+          "klKood": "TEHNO_SOOJUSA",
+          "tenaId": "2520",
+          "nimetus": "õhk-õhk soojuspump",
+          "klNimetus": "Soojusallikas",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "91",
+          "klKood": "TEHNO_MAJAPIDAMISGAAS",
+          "tenaId": "20402",
+          "nimetus": "puudub",
+          "klNimetus": "Majapidamisgaasi liik",
+          "eh_tehna_id": null,
+          "lisavaartus": "null"
+        },
+        {
+          "oper": "A",
+          "jrkNr": "20",
+          "klKood": "TEHNO_VESI",
+          "tenaId": "1102",
+          "nimetus": "puudub",
+          "klNimetus": "Veevarustuse liik",
+          "eh_tehna_id": "4788306",
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "30",
+          "klKood": "TEHNO_KANAL",
+          "tenaId": "1405",
+          "nimetus": "lokaalne, mahuti",
+          "klNimetus": "Kanalisatsiooni liik",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "4",
+          "klKood": "KONS_VSEIN",
+          "tenaId": "511",
+          "nimetus": "tellis",
+          "klNimetus": "Välisseina liik",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "7",
+          "klKood": "KONS_KATUS",
+          "tenaId": "605",
+          "nimetus": "plekk",
+          "klNimetus": "Katusekatte materjal",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "1",
+          "klKood": "KONS_KKONSTR",
+          "tenaId": "215",
+          "nimetus": "puit",
+          "klNimetus": "Kande- ja jäigastavate konstruktsioonide materjal",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "4",
+          "klKood": "KONS_VSEIN",
+          "tenaId": "515",
+          "nimetus": "laudis",
+          "klNimetus": "Välisseina liik",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "3",
+          "klKood": "KONS_VALISV",
+          "tenaId": "709",
+          "nimetus": "puit (vooder)",
+          "klNimetus": "Välisseina välisviimistluse materjal",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "4",
+          "klKood": "KONS_VSEIN",
+          "tenaId": "509",
+          "nimetus": "vahetäitega sõrestik",
+          "klNimetus": "Välisseina liik",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "60",
+          "klKood": "TEHNO_ENERGIA",
+          "tenaId": "2607",
+          "nimetus": "elekter",
+          "klNimetus": "Energiakandja",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "60",
+          "klKood": "TEHNO_ENERGIA",
+          "tenaId": "2617",
+          "nimetus": "segapuit",
+          "klNimetus": "Energiakandja",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "60",
+          "klKood": "TEHNO_ENERGIA",
+          "tenaId": "2616",
+          "nimetus": "puitpellet",
+          "klNimetus": "Energiakandja",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        },
+        {
+          "oper": "A",
+          "jrkNr": "40",
+          "klKood": "TEHNO_SOOJAVLIIK",
+          "tenaId": "2402",
+          "nimetus": "puudub",
+          "klNimetus": "Soojusvarustuse liik",
+          "eh_tehna_id": null,
+          "lisavaartus": null
+        }
+      ]
+    }
+  }
+}

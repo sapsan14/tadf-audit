@@ -30,21 +30,28 @@ import streamlit as st  # noqa: E402
 
 from app._state import get_current  # noqa: E402
 
-st.title("🔌 Подключения — EHR + Teatmik без копипастов")
+st.title("🔌 Подключения — Teatmik без копипастов")
 
 st.markdown(
     """
-TADF не лазит сам на ehr.ee и teatmik.ee — оба сайта блокируют запросы
-с серверов: EHR требует Smart-ID логина (cookies привязаны к сессии),
-Teatmik защищён Cloudflare CAPTCHA с привязкой к IP.
+### EHR работает напрямую — ничего ставить не надо
 
-Вместо этого — **маленький помощник в вашем браузере**: после того,
-как вы залогинились (EHR) или решили CAPTCHA (Teatmik), он считывает
-страницу и шлёт данные в текущий аудит TADF. **Никакого копипаста,
-никаких паролей, ничего не выходит за пределы вашего браузера.**
+Для EHR.ee TADF использует публичный API
+(`livekluster.ehr.ee/api/building/v3/buildingData`) — без авторизации,
+без браузера. На странице **«🏠 Здание»** введите EHR-код и нажмите
+**«🔎 Подгрузить из EHR»** — поля заполнятся за секунду.
 
-Ниже — два варианта установки. Выберите один. Делают они одно и то же,
-разница только в удобстве.
+### Для Teatmik нужен помощник в браузере
+
+Teatmik защищён Cloudflare CAPTCHA, привязанной к IP того, кто решил
+её в браузере. С серверного IP Hetzner попасть туда нельзя — но
+**после того, как вы решите CAPTCHA в своём браузере**, маленький
+помощник может прочитать открытую карточку компании и переслать
+данные в TADF. **Никакого копипаста, никаких паролей, никаких cookies
+не уходит наружу.**
+
+Ниже — два варианта установки этого помощника. Выберите один; делают
+они одно и то же, разница только в удобстве.
 """
 )
 
@@ -91,21 +98,21 @@ st.markdown(
 """
 )
 
-# The bookmarklet — single-line JS the user drags onto their bookmarks
-# bar. Mirrors the userscript's logic:
+# Bookmarklet — Teatmik only. EHR no longer needs a browser helper since
+# we hit the public livekluster.ehr.ee/api/building/v3/buildingData
+# endpoint directly from Hetzner via tadf.external.ehr_client.
+#
+# Workflow:
 #   1. Capture #tadf=… fragment if present and persist to localStorage
-#      (24h TTL) so it survives navigation between teatmik.ee/search and
-#      .../personlegal/<reg_code> pages.
+#      (24h TTL) so it survives navigation between teatmik.ee/search
+#      and /personlegal/<reg_code>.
 #   2. Resolve token from fragment (preferred) → localStorage (fallback).
-#   3. On EHR /buildings/<code> or /objects/<code>: fetch JSON via the
-#      user's authed session, POST to TADF.
-#   4. On Teatmik /personlegal/<code>[-slug]: scrape DOM, POST to TADF.
-#   5. On Teatmik /search?…: show a "now click a company" hint.
-#   6. Otherwise: explain we're on the wrong page.
+#   3. On Teatmik /personlegal/<code>[-slug]: scrape DOM, POST to TADF.
+#   4. On Teatmik /search?…: show a "now click a company" hint.
+#   5. Anywhere else: explain where it should be clicked.
 _BOOKMARKLET_SRC = (
     "javascript:(async()=>{"
     "const TADF='https://tadf-audit.h2oatlas.ee',LS='tadf_connector_token',TTL=86400000;"
-    # Token plumbing
     "const fromHash=()=>{const h=(location.hash||'').replace(/^#/,'');"
     "for(const p of h.split('&')){const[k,v]=p.split('=');"
     "if(k==='tadf'&&v){const t=decodeURIComponent(v),c=t.split(':');"
@@ -118,26 +125,22 @@ _BOOKMARKLET_SRC = (
     "catch(e){}};"
     "const fh=fromHash();if(fh)save(fh);"
     "const ctx=fh||fromLS();"
-    # Decide what to do based on URL
-    "let payload=null,path=null;"
-    "if(location.hostname.includes('ehr.ee')){"
-    "const m=location.pathname.match(/(?:buildings|objects)\\/(\\d+)/);"
-    "if(!m){alert('TADF: открой страницу здания на EHR (например …/buildings/102032773)');return;}"
-    "if(!ctx){alert('TADF: токен не найден. Открой ссылку из TADF (кнопка \\\"Открыть в EHR\\\")');return;}"
-    "const code=m[1];"
-    "try{const r=await fetch('/api/building/v3/'+code,{credentials:'include'});"
-    "payload=r.ok?await r.json():{ehr_code:code,_error:r.status};}"
-    "catch(e){payload={ehr_code:code,_error:String(e)};}"
-    "payload.ehr_code=code;path='/api/import-ehr/';}"
-    "else if(location.hostname.includes('teatmik.ee')){"
+    "if(!location.hostname.includes('teatmik.ee')){"
+    "if(location.hostname.includes('tadf-audit')){"
+    "alert('💡 Эту закладку нужно нажимать НА странице Teatmik.ee, не на TADF. '+"
+    "'Открой аудит, кликни \\\"🔎 Найти в Teatmik\\\" — откроется новая вкладка. ТАМ кликни закладку.');"
+    "}else if(location.hostname.includes('ehr.ee')){"
+    "alert('💡 Для EHR закладка не нужна — на странице \\\"Здание\\\" в TADF '+"
+    "'есть кнопка \\\"🔎 Подгрузить из EHR\\\", она тянет данные напрямую без браузера.');"
+    "}else{alert('TADF: эта страница не Teatmik.ee. Закладка работает только там.');}return;}"
     "const m=location.pathname.match(/personlegal\\/(\\d+)/);"
     "if(!m){"
     "if(location.pathname.includes('/search')){"
-    "if(!ctx){alert('TADF: токен не найден — открой Teatmik из TADF.');return;}"
-    "alert('🔎 TADF готов. Кликни на нужную компанию в результатах поиска — '+"
+    "if(!ctx){alert('TADF: токен не найден — открой Teatmik из кнопки в TADF.');return;}"
+    "alert('🔎 TADF готов (токен сохранён). Кликни на нужную компанию в результатах поиска — '+"
     "'затем снова нажми на закладку TADF на странице компании.');return;}"
     "alert('TADF: это не карточка компании. Должно быть www.teatmik.ee/et/personlegal/...');return;}"
-    "if(!ctx){alert('TADF: токен не найден. Открой ссылку из TADF (кнопка \\\"Найти в Teatmik\\\")');return;}"
+    "if(!ctx){alert('TADF: токен не найден. Открой ссылку из кнопки в TADF.');return;}"
     "const code=m[1];"
     "const name=document.querySelector('h1,h2,.company-name')?.textContent?.trim();"
     "let addr=null,status=null;"
@@ -145,20 +148,12 @@ _BOOKMARKLET_SRC = (
     "const t=(el.textContent||'').toLowerCase(),s=el.nextElementSibling;if(!s)return;"
     "if((t.includes('aadress')||t.includes('адрес'))&&!addr)addr=s.textContent.trim();"
     "if((t.includes('staatus')||t.includes('статус'))&&!status)status=s.textContent.trim();});"
-    "payload={reg_code:code,name,address:addr,status};path='/api/import-teatmik/';}"
-    "else if(location.hostname.includes('tadf-audit')){"
-    "alert('💡 Эту закладку нужно нажимать НА странице EHR.ee или Teatmik.ee, '+"
-    "'а не на TADF. Сначала открой аудит, кликни \\\"🔎 Открыть в EHR\\\" или '+"
-    "'\\\"🔎 Найти в Teatmik\\\" — оно откроет нужный сайт в новой вкладке. '+"
-    "'ТАМ нажми на закладку.');return;}"
-    "else{alert('TADF: эта страница не EHR.ee и не Teatmik.ee. '+"
-    "'Закладка работает только на этих сайтах.');return;}"
-    # POST
-    "try{const r=await fetch(TADF+path+ctx.auditId,{method:'POST',"
+    "const payload={reg_code:code,name,address:addr,status};"
+    "try{const r=await fetch(TADF+'/api/import-teatmik/'+ctx.auditId,{method:'POST',"
     "headers:{'Content-Type':'application/json','Authorization':'Bearer '+ctx.token,"
     "'X-Source-URL':location.href},body:JSON.stringify(payload),mode:'cors'});"
     "if(r.ok)alert('✅ TADF: данные отправлены в аудит #'+ctx.auditId+'. Вернись во вкладку TADF.');"
-    "else if(r.status===401)alert('❌ TADF: токен истёк — открой страницу из TADF заново.');"
+    "else if(r.status===401)alert('❌ TADF: токен истёк — открой Teatmik из TADF заново.');"
     "else alert('❌ TADF: '+r.status+' '+(await r.text()).slice(0,200));}"
     "catch(e){alert('❌ TADF недоступен: '+e);}"
     "})();"
