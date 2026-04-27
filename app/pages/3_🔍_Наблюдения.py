@@ -594,16 +594,39 @@ for i, f in enumerate(audit.findings):
                     key=f"rank_accept_{scope}_{i}",
                     type="primary",
                 ):
-                    # Streamlit forbids writing the multiselect's widget-state
-                    # key (refs_…) after the widget has rendered this run. We
-                    # stash the merged list in a non-widget slot; the top of
-                    # the loop iteration applies it before the next render.
-                    current = st.session_state.get(
-                        f"refs_{scope}_{i}", f.legal_ref_codes
-                    )
+                    # Compute merged set: current multiselect selection +
+                    # AI-ranked codes, deduplicated, order-preserving.
+                    # Read from `f.legal_ref_codes` first (already updated
+                    # by the auto-persist at L437 from `edited_legal_codes`)
+                    # — that's a list[str] guaranteed; the widget-state
+                    # slot can lag behind on certain Streamlit reruns.
+                    current = list(f.legal_ref_codes or [])
+                    if not current:
+                        # Fallback: read straight from the multiselect's
+                        # session-state slot (covers the very-first render
+                        # where auto-persist hasn't pushed yet).
+                        widget_state = st.session_state.get(f"refs_{scope}_{i}")
+                        if isinstance(widget_state, (list, tuple)):
+                            current = list(widget_state)
                     merged = list(dict.fromkeys([*current, *ranked]))
+
+                    # 1) Mutate the audit model RIGHT NOW so downstream code
+                    #    in this same script run (ensure_draft_saved at the
+                    #    bottom) sees the new list.
+                    f.legal_ref_codes = merged
+                    set_current(audit)
+
+                    # 2) Queue a widget reseed for the next render. Streamlit
+                    #    forbids writing the multiselect's `key` after the
+                    #    widget has rendered in this run — so we stash the
+                    #    list under a non-widget slot. The top of the next
+                    #    loop iteration (line 364) consumes it and pops the
+                    #    multiselect's session-state key so the widget
+                    #    re-seeds from `default=f.legal_ref_codes`.
                     st.session_state[f"_pending_refs_{scope}_{i}"] = merged
-                    del st.session_state[_rank_key(i)]
+
+                    # 3) Close the AI panel.
+                    st.session_state.pop(_rank_key(i), None)
                     st.rerun()
                 if rb.button("❌ Отклонить", key=f"rank_reject_{scope}_{i}"):
                     del st.session_state[_rank_key(i)]
