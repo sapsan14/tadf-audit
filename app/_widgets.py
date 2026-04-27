@@ -412,7 +412,7 @@ _PENDING_PREFIX = "_imp_pending_widget_"
 def autofill_from_picker(
     *,
     slot: str,
-    name_widget_key: str,
+    picked_name: str | None,
     field_to_widget: dict[str, str],
     fetch: Callable[[str], dict | None],
     apply_to_model: Callable[[str, object], None] | None = None,
@@ -424,33 +424,37 @@ def autofill_from_picker(
     record — company, reg-code, kutsetunnistus, contact details — is
     already in the DB. Re-typing it is pure friction.
 
+    The caller passes `picked_name` directly (typically `audit.client.name`
+    or `audit.composer.full_name`) rather than letting the helper read it
+    out of `st.session_state[name_widget_key]`. That dodges two failure
+    modes seen on prod:
+
+      1. **Scope flip**: when a fresh draft transitions from `audit.id is
+         None` (scope="new") to a saved id mid-run, the widget keys all
+         change. On the rerun the previous "a_new_client_name" slot still
+         holds the typed value but the new "a_<id>_client_name" key is
+         empty — autofill checking widget state therefore bailed and the
+         siblings never filled. Reading the model bypasses both keys.
+      2. **Click swallowing**: the previous version called `st.rerun()`
+         on first fire, which killed any same-run button click (Искать
+         в Ariregister / Maa-amet / Teatmik). The widget keys are written
+         BEFORE the form widgets render, so the values land on this run
+         without a rerun — buttons get to fire normally.
+
     Behaviour:
-      - Tracks the last-seen value of the name widget in
+      - Tracks the last-applied value in
         `st.session_state[f"_autofill_last_{slot}"]`.
-      - On change AND when `fetch(name)` returns a record, for every
-        non-empty mapped field:
-          1. Pop the existing widget-state slot (so a stale prior value
-             doesn't out-rank the new write — Streamlit treats a key
-             that was already set by a previous render as authoritative
-             over `value=`, which broke this flow before).
-          2. Write the new value into the widget-state slot.
-          3. (NEW, optional) Call `apply_to_model(field, value)` so the
-             page's pydantic model is updated in lockstep with the
-             session-state write. Without this, the widget's `value=`
-             argument keeps reading `audit.client.reg_code or ""`, which
-             stays None until the widget round-trips the value back —
-             and on some Streamlit versions that means the widget shows
-             empty even though session_state has the right value queued.
-      - Calls `st.rerun()` so the widgets render with the new state.
-      - No rerun on second sight of the same name (loop guard).
+      - On `picked_name != last`, fetches the directory record and writes
+        every non-empty field into its widget key (popping any prior
+        value first) PLUS calls `apply_to_model(field, value)` so the
+        page's pydantic model is updated in lockstep.
+      - No `st.rerun()` — must be called BEFORE the sibling-field widgets
+        render so they pick up the new state on this run.
 
-    Returns True if a rerun was issued.
-
-    Must be called BEFORE the sibling-field widgets render in the same
-    script run.
+    Returns True if any field was filled.
     """
     last_key = f"_autofill_last_{slot}"
-    picked = (st.session_state.get(name_widget_key) or "").strip()
+    picked = (picked_name or "").strip()
     if not picked:
         st.session_state.pop(last_key, None)
         return False
@@ -468,15 +472,15 @@ def autofill_from_picker(
         if not value:
             continue
         # Drop any prior widget state for this key so the new write wins
-        # cleanly (see docstring step 1).
+        # cleanly. Streamlit treats a key that was already set by a
+        # previous render as authoritative over `value=`/`index=`, which
+        # broke siblings when the user picked a different client.
         st.session_state.pop(widget_key, None)
         st.session_state[widget_key] = value
         if apply_to_model is not None:
             apply_to_model(field, value)
         changed = True
 
-    if changed:
-        st.rerun()
     return changed
 
 
