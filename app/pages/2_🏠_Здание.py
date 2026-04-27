@@ -10,10 +10,25 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
+from tadf.api.imports import (  # noqa: E402
+    list_pending,
+    map_ehr,
+    map_teatmik,
+    mark_applied,
+    mark_rejected,
+)
+from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.external.links import ehr_building_url, teatmik_company_url  # noqa: E402
 from tadf.intake.document_extract import extract_from_upload  # noqa: E402
 from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.llm.extractor import diff as _extract_diff  # noqa: E402
+
+
+def _with_token_fragment(url: str, audit_id: int) -> str:
+    """Append `#tadf=<token>` to a URL so the in-browser helper can read it."""
+    token = _issue_token(audit_id)
+    sep = "&" if "#" in url else "#"
+    return f"{url}{sep}tadf={token}"
 
 st.title("Здание (auditi objekt)")
 
@@ -45,6 +60,112 @@ if _PENDING_KEY in st.session_state:
         st.session_state.pop(k(field), None)
     audit.building = b
     set_current(audit)
+
+
+# ---------------------------------------------------------------------------
+# 📥 Pending imports from the bookmarklet / Tampermonkey userscript.
+# When the auditor clicks "Открыть в EHR/Teatmik" elsewhere on this page,
+# the helper running in the auditor's browser POSTs data to
+# /api/import-{ehr,teatmik}/{audit_id}; the row sits in pending_import
+# until accepted or rejected here.
+# ---------------------------------------------------------------------------
+if audit.id is not None:
+    _imports = list_pending(audit.id)
+    for imp in _imports:
+        if imp.kind == "ehr":
+            mapped = map_ehr(imp.payload)
+            current = b.model_dump()
+            rows = _extract_diff(current, mapped)
+            with st.container(border=True):
+                st.markdown(
+                    f"📥 **Импорт из EHR** — получено "
+                    f"{imp.received_at.strftime('%H:%M:%S')} · "
+                    f"полей: **{len(rows)}**"
+                )
+                if imp.source_url:
+                    st.caption(f"Источник: {imp.source_url}")
+                if not rows:
+                    st.success("Все поля совпадают с уже введёнными — нечего применять.")
+                else:
+                    hc1, hc2, hc3, hc4 = st.columns([2, 3, 3, 1])
+                    hc1.markdown("**Поле**")
+                    hc2.markdown("**Сейчас**")
+                    hc3.markdown("**Из EHR**")
+                    hc4.markdown("**✅**")
+                    accept: dict[str, bool] = {}
+                    for field, cur, proposed in rows:
+                        rc1, rc2, rc3, rc4 = st.columns([2, 3, 3, 1])
+                        rc1.write(f"`{field}`")
+                        rc2.write("(пусто)" if cur in (None, "") else str(cur))
+                        rc3.write(str(proposed))
+                        accept[field] = rc4.checkbox(
+                            "",
+                            value=True,
+                            key=f"imp_ehr_accept_{imp.id}_{field}",
+                            label_visibility="collapsed",
+                        )
+                    ac1, ac2, _ = st.columns([2, 2, 4])
+                    if ac1.button(
+                        "✅ Применить выбранные",
+                        type="primary",
+                        key=f"imp_ehr_apply_{imp.id}",
+                    ):
+                        chosen = {f: mapped[f] for f, ok in accept.items() if ok and f in mapped}
+                        st.session_state[_PENDING_KEY] = chosen
+                        mark_applied(imp.id)
+                        st.rerun()
+                    if ac2.button("❌ Отклонить", key=f"imp_ehr_reject_{imp.id}"):
+                        mark_rejected(imp.id)
+                        st.rerun()
+                with st.expander("🔍 Сырой JSON из EHR (debug)", expanded=False):
+                    st.json(imp.payload)
+        elif imp.kind == "teatmik":
+            mapped = map_teatmik(imp.payload)
+            with st.container(border=True):
+                st.markdown(
+                    f"📥 **Импорт из Teatmik** — получено "
+                    f"{imp.received_at.strftime('%H:%M:%S')}"
+                )
+                if imp.source_url:
+                    st.caption(f"Источник: {imp.source_url}")
+                if not mapped:
+                    st.warning("Пустая карточка компании (нет полезных полей).")
+                else:
+                    st.write("Найдено:")
+                    for kfield, val in mapped.items():
+                        st.write(f"- `{kfield}`: {val}")
+                # Teatmik can map to designer OR builder OR client.name —
+                # let the user pick.
+                tc1, tc2, tc3, tc4 = st.columns(4)
+                target = tc1.selectbox(
+                    "Куда вставить",
+                    options=["designer", "builder", "client"],
+                    key=f"imp_tm_target_{imp.id}",
+                    label_visibility="collapsed",
+                )
+                if tc2.button("✅ Применить", type="primary", key=f"imp_tm_apply_{imp.id}"):
+                    name = mapped.get("name") or mapped.get("reg_code")
+                    if target == "designer":
+                        st.session_state[_PENDING_KEY] = {"designer": name}
+                    elif target == "builder":
+                        st.session_state[_PENDING_KEY] = {"builder": name}
+                    elif target == "client":
+                        if audit.client is None:
+                            from tadf.models import Client
+
+                            audit.client = Client(name=name or "")
+                        else:
+                            audit.client.name = name or ""
+                        if mapped.get("reg_code"):
+                            audit.client.reg_code = mapped["reg_code"]
+                        if mapped.get("address"):
+                            audit.client.address = mapped["address"]
+                        set_current(audit)
+                    mark_applied(imp.id)
+                    st.rerun()
+                if tc4.button("❌ Отклонить", key=f"imp_tm_reject_{imp.id}"):
+                    mark_rejected(imp.id)
+                    st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -193,19 +314,32 @@ with col2:
         or None
     )
 
-# EHR / Maa-amet deep-link row — opens the official portal in a new tab
-# so Fjodor can copy/paste fields. Direct API access requires Keycloak
-# OAuth (out of scope for this sprint); a link button is the highest-
-# leverage UX we can ship safely.
+# EHR / Maa-amet deep-link row. If the audit is saved, we tack on a
+# per-audit TADF token so the in-browser helper (bookmarklet /
+# Tampermonkey userscript) can POST data back. Without a saved audit_id,
+# the link is just a plain deep link — Fjodor still gets to the right
+# page, but auto-import won't work until he saves the audit.
 _ehr_link = ehr_building_url(b.ehr_code, b.kataster_no)
 if _ehr_link:
+    if audit.id is not None:
+        _ehr_link_full = _with_token_fragment(_ehr_link, audit.id)
+        ehr_label = "🔎 Открыть в EHR (авто-импорт)"
+    else:
+        _ehr_link_full = _ehr_link
+        ehr_label = "🔗 Открыть на ehr.ee (без авто-импорта — сохрани аудит)"
     lc1, lc2, _ = st.columns([2, 2, 4])
-    lc1.link_button("🔗 Открыть на ehr.ee", _ehr_link, use_container_width=True)
+    lc1.link_button(ehr_label, _ehr_link_full, use_container_width=True)
     if b.kataster_no:
         lc2.link_button(
             "🗺️ Maa-amet (по кадастру)",
             f"https://geoportaal.maaamet.ee/est/Kaardirakendused/Kinnistu-otsing-p82.html?nupp=&otsing={b.kataster_no}",
             use_container_width=True,
+        )
+    if audit.id is not None:
+        st.caption(
+            "💡 После Smart-ID логина установленный bookmarklet / Tampermonkey "
+            "userscript автоматически отправит данные в этот аудит. "
+            "Подключение настраивается на странице **🔌 Подключения**."
         )
 else:
     st.caption(
@@ -393,6 +527,8 @@ with col1:
     if b.designer:
         link = teatmik_company_url(b.designer)
         if link:
+            if audit.id is not None:
+                link = _with_token_fragment(link, audit.id)
             st.link_button("🔎 Teatmik (designer)", link, use_container_width=True)
 with col2:
     b.builder = st.text_input(
@@ -404,6 +540,8 @@ with col2:
     if b.builder:
         link = teatmik_company_url(b.builder)
         if link:
+            if audit.id is not None:
+                link = _with_token_fragment(link, audit.id)
             st.link_button("🔎 Teatmik (builder)", link, use_container_width=True)
 
 if b.pre_2003:

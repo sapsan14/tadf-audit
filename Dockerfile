@@ -46,29 +46,32 @@ RUN uv sync --frozen --no-dev
 # but checked into git so we don't need libreoffice at build time).
 COPY .streamlit ./.streamlit
 
-# Logo + favicon SVGs — referenced by app/_style.py (page_icon) and
-# app/TADF_Ehitus.py (home banner).
+# Logo + favicon SVGs + browser-helper userscript — referenced by
+# app/_style.py (page_icon) and the new "Подключения" page.
 COPY assets ./assets
+
+# Entrypoint runs uvicorn (FastAPI sidecar :8001) + streamlit (:8501).
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Pre-create the writable runtime dir owned by app uid; bind-mount in
 # docker-compose puts a real Docker volume here so SQLite + photos persist.
-RUN mkdir -p /app/data && useradd --create-home --uid 1000 app && chown -R app:app /app
+RUN mkdir -p /app/data && useradd --create-home --uid 1000 app \
+    && chown -R app:app /app \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh
 USER app
 
 # `auth.yaml` is mounted at runtime (gitignored), not baked in.
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
-EXPOSE 8501
+EXPOSE 8501 8001
 
 # `--server.address=0.0.0.0` so Caddy on the host can reach us via the
-# docker network. Healthcheck hits the standard /_stcore/health endpoint.
+# docker network. Healthcheck hits Streamlit's standard endpoint AND the
+# FastAPI sidecar so the container is only "healthy" when both are up.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=4 \
-    CMD curl -fsS http://127.0.0.1:8501/_stcore/health || exit 1
+    CMD curl -fsS http://127.0.0.1:8501/_stcore/health \
+        && curl -fsS http://127.0.0.1:8001/api/health \
+        || exit 1
 
-CMD ["uv", "run", "streamlit", "run", "app/main.py", \
-     "--server.address=0.0.0.0", \
-     "--server.port=8501", \
-     "--server.headless=true", \
-     "--server.fileWatcherType=none", \
-     "--browser.gatherUsageStats=false"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

@@ -59,6 +59,7 @@ pages = [
     st.Page("pages/4_📸_Фото.py", title="Фото", icon="📸"),
     st.Page("pages/5_📄_Готовый_отчёт.py", title="Готовый отчёт", icon="📄"),
     st.Page("pages/6_📚_Правовая_база.py", title="Правовая база", icon="📚"),
+    st.Page("pages/7_🔌_Подключения.py", title="Подключения", icon="🔌"),
 ]
 nav = st.navigation(pages, position="sidebar")
 

@@ -23,17 +23,31 @@
 		max_size 100MB
 	}
 
-	# WebSocket + main app
-	reverse_proxy tadf:8501 {
-		header_up Host {host}
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
-		# Streamlit closes idle WS in ~30 s; bump our buffer so we don't
-		# hold up legit longer requests (LLM polish/draft can take 10–20 s).
-		transport http {
-			read_timeout 300s
-			write_timeout 300s
+	# /api/* → FastAPI sidecar on :8001 (receives EHR / Teatmik
+	# imports from the in-browser bookmarklet / Tampermonkey userscript).
+	# Token-auth handled by the FastAPI app itself; CORS too.
+	handle /api/* {
+		reverse_proxy tadf:8001 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# Everything else → Streamlit on :8501 (WebSocket-aware).
+	handle {
+		reverse_proxy tadf:8501 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			# Streamlit closes idle WS in ~30 s; bump our buffer so we don't
+			# hold up legit longer requests (LLM polish/draft can take 10–20 s).
+			transport http {
+				read_timeout 300s
+				write_timeout 300s
+			}
 		}
 	}
 

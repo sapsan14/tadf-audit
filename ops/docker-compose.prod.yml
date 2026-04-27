@@ -27,6 +27,7 @@ services:
       - web
     expose:
       - "8501"
+      - "8001"
 
   caddy:
     image: caddy:2-alpine

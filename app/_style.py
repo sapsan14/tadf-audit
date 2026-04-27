@@ -147,8 +147,10 @@ section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
     text-decoration: none;
     border-bottom: 1px dotted rgba(128, 128, 128, 0.5);
 }}
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stMarkdown"]:has(.tadf-sidebar-footer),
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.tadf-sidebar-footer) {{
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"]
+    [data-testid="stMarkdown"]:has(.tadf-sidebar-footer),
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"]
+    > *:has(.tadf-sidebar-footer) {{
     position: absolute !important;
     bottom: 0 !important;
     left: 0 !important;
