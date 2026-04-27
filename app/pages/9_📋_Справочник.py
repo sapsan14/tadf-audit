@@ -1,4 +1,4 @@
-"""Page «🗂 Справочник» — manage the named entities behind the form
+"""Page «📋 Справочник» — manage the named entities behind the form
 selection boxes (auditors, clients, designers, builders, use purposes).
 
 These entities live in the `directory_*` tables. Every audit save mirrors
@@ -315,7 +315,7 @@ def _render_row(
 # Page header
 # ---------------------------------------------------------------------------
 
-st.title("🗂 Справочник")
+st.title("📋 Справочник")
 st.caption(
     "Имена и значения, которые попадают в выпадающие списки формы аудита. "
     "Запись добавляется автоматически при сохранении аудита; здесь её можно "
