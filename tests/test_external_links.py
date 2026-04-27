@@ -62,14 +62,15 @@ def test_teatmik_empty_returns_none() -> None:
     assert teatmik_company_url("   ") is None
 
 
-def test_maaamet_url_uses_xgis2_kat_tunnus() -> None:
+def test_maaamet_url_uses_kataster_ee() -> None:
     url = maaamet_kataster_url("85101:004:0020")
     assert url is not None
-    # Must hit the new xgis2 maainfo endpoint with the documented params,
-    # not the legacy geoportaal Kinnistu-otsing form (which silently
-    # redirected and dropped query strings — see commit fixing #N).
-    assert url.startswith("https://xgis.maaamet.ee/xgis2/page/app/maainfo")
-    assert "ALAJAOTUS=KIRG_KATASTRIYKSUSED" in url
+    # Must hit the new official MaRu cadastre portal at kataster.ee.
+    # The earlier xgis2/page/app/maainfo?KAT_TUNNUS=… loaded the SPA shell
+    # but never actually navigated to the parcel; kataster.ee/?nr=…
+    # is the canonical query-string form that propagates into the EST/ENG
+    # language switcher (proof it's a server-recognised parameter).
+    assert url.startswith("https://kataster.ee/?nr=")
     # `:` must be percent-encoded inside the value
     assert "85101%3A004%3A0020" in url
 
@@ -78,3 +79,17 @@ def test_maaamet_url_none_for_empty_input() -> None:
     assert maaamet_kataster_url(None) is None
     assert maaamet_kataster_url("") is None
     assert maaamet_kataster_url("   ") is None
+
+
+def test_maaamet_xgis_backup_url_still_uses_xgis2() -> None:
+    """The xgis2 link is kept as a backup in case kataster.ee is down —
+    it just needs to round-trip the kataster value, even if the SPA may
+    not always honour it."""
+    from tadf.external.links import maaamet_xgis_kataster_url
+
+    url = maaamet_xgis_kataster_url("85101:004:0020")
+    assert url is not None
+    assert url.startswith("https://xgis.maaamet.ee/xgis2/page/app/maainfo")
+    assert "85101%3A004%3A0020" in url
+    assert maaamet_xgis_kataster_url("") is None
+    assert maaamet_xgis_kataster_url(None) is None
