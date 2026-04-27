@@ -14,8 +14,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt
 
 TEMPLATES_DIR = Path(__file__).parent
 SUBTYPES = ("kasutuseelne", "korraline", "erakorraline")
@@ -36,8 +38,112 @@ def _p(doc: Document, text: str, *, bold: bool = False, center: bool = False) ->
     run.font.size = Pt(11)
 
 
+def _add_field(paragraph, instr: str, font_size: int = 9) -> None:
+    """Append a Word field (e.g. PAGE, NUMPAGES) to `paragraph`.
+
+    python-docx has no high-level API for this, so we drop in the four
+    `<w:fldChar>` / `<w:instrText>` elements that Word uses to recognise
+    a field. We don't precompute the visible text — Word evaluates the
+    field on open. LibreOffice (used by the PDF converter) supports the
+    same encoding.
+    """
+    run = paragraph.add_run()
+    run.font.size = Pt(font_size)
+
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+    instr_text = OxmlElement("w:instrText")
+    instr_text.set(qn("xml:space"), "preserve")
+    instr_text.text = f" {instr} "
+    fld_separate = OxmlElement("w:fldChar")
+    fld_separate.set(qn("w:fldCharType"), "separate")
+    # Placeholder visible text — Word/LibreOffice replaces this on open.
+    placeholder = OxmlElement("w:t")
+    placeholder.text = "?"
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+
+    run._r.append(fld_begin)
+    run._r.append(instr_text)
+    run._r.append(fld_separate)
+    run._r.append(placeholder)
+    run._r.append(fld_end)
+
+
+def _add_run(paragraph, text: str, *, font_size: int = 9, bold: bool = False) -> None:
+    run = paragraph.add_run(text)
+    run.font.size = Pt(font_size)
+    run.bold = bold
+
+
+def _setup_header_footer(doc: Document) -> None:
+    """Attach a docxtpl-templated header / footer to the document's only section.
+
+    Wires two placeholders that the context_builder fills:
+      - `{{ page_header }}` — multi-line text (auditor override on «Готовый
+        отчёт» if set, else `default_header_text(audit)` — Töö nr / Töö
+        nimetus, mirroring the corpus convention).
+      - `{{ page_footer }}` — single line with the päädev isik signatures.
+
+    Plus a fixed page-number field (`Lk PAGE / NUMPAGES`) on a second header
+    line, right-aligned. Word evaluates the field on open; LibreOffice does
+    too (used for the PDF converter).
+
+    The cover page (page 1) gets a DIFFERENT, empty header/footer via the
+    `different_first_page_header_footer` flag, so the title page stays clean.
+    """
+    section = doc.sections[0]
+    section.different_first_page_header_footer = True
+
+    # Default header (page 2+) — clear python-docx's stub paragraph first.
+    header = section.header
+    for p in list(header.paragraphs):
+        p._element.getparent().remove(p._element)
+
+    # Line 1: auditor-overridable text. The placeholder may contain newlines
+    # (e.g. "Töö nr.: 1/2026\nTöö nimetus: …") which docxtpl renders as soft
+    # line breaks inside this single paragraph.
+    h1 = header.add_paragraph()
+    _add_run(h1, "{{ page_header }}")
+
+    # Line 2: page-of-pages on the right via a right-aligned tab stop.
+    h2 = header.add_paragraph()
+    h2.paragraph_format.tab_stops.add_tab_stop(
+        Cm(16), alignment=WD_TAB_ALIGNMENT.RIGHT
+    )
+    _add_run(h2, "\tLk ")
+    _add_field(h2, "PAGE")
+    _add_run(h2, " / ")
+    _add_field(h2, "NUMPAGES")
+
+    # Default footer (page 2+).
+    footer = section.footer
+    for p in list(footer.paragraphs):
+        p._element.getparent().remove(p._element)
+    f1 = footer.add_paragraph()
+    _add_run(f1, "{{ page_footer }}")
+
+    # First-page header/footer — empty paragraph so the cover stays clean.
+    # python-docx requires the parts to exist before we touch them, so we
+    # explicitly enable the slot and leave it default-empty.
+    first_header = section.first_page_header
+    for p in list(first_header.paragraphs):
+        p._element.getparent().remove(p._element)
+    first_header.add_paragraph()  # empty
+
+    first_footer = section.first_page_footer
+    for p in list(first_footer.paragraphs):
+        p._element.getparent().remove(p._element)
+    first_footer.add_paragraph()  # empty
+
+
 def build(subtype: str = "kasutuseelne") -> Path:
     doc = Document()
+
+    # Header + footer FIRST so they're attached to section 0 before any body
+    # content is added (python-docx works either order, but doing it first
+    # makes the docxtpl render order obvious to the next reader).
+    _setup_header_footer(doc)
 
     # ---------- 0. TITTELLEHT ----------
     _p(doc, "{{ cover.title }}", bold=True, center=True)
