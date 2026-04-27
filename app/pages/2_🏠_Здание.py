@@ -14,6 +14,7 @@ from app._widgets import (  # noqa: E402
     address_picker,
     company_picker,
     flush_improve_pending,
+    hint_caption,
     improve_button_for,
 )
 from tadf import feature_flags  # noqa: E402
@@ -421,6 +422,16 @@ def _apply_inads_hit(hit) -> None:  # type: AddressHit
     update = {"address": hit.address}
     if hit.kataster and not (b.kataster_no or "").strip():
         update["kataster_no"] = hit.kataster
+    # in-ADS doesn't always return a kataster — apartment-unit addresses,
+    # zones with no parcel link, or EHITISHOONE rows often come back with
+    # `kataster=None`. Stash a flag so the form can show a one-line hint
+    # next to the Katastritunnus input pointing the auditor to the next
+    # step (EHR pull or Kataster.ee homepage). Cleared as soon as a hit
+    # WITH kataster lands.
+    if hit.kataster:
+        st.session_state.pop(f"_inads_no_kataster_{scope}", None)
+    else:
+        st.session_state[f"_inads_no_kataster_{scope}"] = True
     st.session_state[_PENDING_KEY] = update
 
     # Chain «адрес → EHR код → полное здание»: queue an auto-search on
@@ -488,6 +499,19 @@ with col1:
         )
         or None
     )
+    # Show a hint when in-ADS just returned an address WITHOUT a kataster
+    # (typical for apartment-unit / EHITISHOONE rows). Auto-hides as soon
+    # as kataster gets filled — manually, by EHR pull, or by a later
+    # in-ADS pick that does carry one.
+    if (
+        not (b.kataster_no or "").strip()
+        and st.session_state.get(f"_inads_no_kataster_{scope}")
+    ):
+        hint_caption(
+            "in-ADS не вернул кадастр для этого адреса — попробуйте "
+            "«🔎 Подгрузить из EHR» (по EHR-коду или адресу) "
+            "или откройте «🗺️ Kataster.ee» и поищите вручную."
+        )
 with col2:
     b.ehr_code = (
         st.text_input(
