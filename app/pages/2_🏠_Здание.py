@@ -35,6 +35,33 @@ def _with_token_fragment(url: str, audit_id: int, *, target: str | None = None) 
     extra = f"&target={target}" if target else ""
     return f"{url}{sep}tadf={token}{extra}"
 
+
+def _coerce_for_building_field(field_name: str, value):
+    """Coerce extractor output to the Pydantic-declared type for that field.
+
+    Pydantic v2 doesn't validate on plain `setattr` (no `validate_assignment`),
+    so an int slipping into a `float | None` field reaches `st.number_input`
+    as int and trips StreamlitMixedNumericTypesError when the widget's
+    min_value/step are floats. Coerce here so both `b.field` and
+    `st.session_state[widget_key]` carry the right type.
+    """
+    if value is None:
+        return None
+    from typing import get_args
+
+    from tadf.models import Building as _B
+
+    info = _B.model_fields.get(field_name)
+    if info is None:
+        return value
+    args = [a for a in get_args(info.annotation) if a is not type(None)]
+    target = args[0] if len(args) == 1 else info.annotation
+    if target is float and isinstance(value, int) and not isinstance(value, bool):
+        return float(value)
+    if target is int and isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
 flush_improve_pending()
 
 st.title("Здание (auditi objekt)")
@@ -62,8 +89,9 @@ _PENDING_KEY = f"_pending_b_{scope}"
 if _PENDING_KEY in st.session_state:
     pending = st.session_state.pop(_PENDING_KEY)
     for field, value in pending.items():
+        coerced = _coerce_for_building_field(field, value)
         if hasattr(b, field):
-            setattr(b, field, value)
+            setattr(b, field, coerced)
         # Bulletproof reseed of the widget state. We're at the very top
         # of the script — no widgets instantiated yet — so writing the
         # widget's session_state key is allowed (Streamlit only forbids
@@ -72,10 +100,10 @@ if _PENDING_KEY in st.session_state:
         # session_state value directly forces the widget to render the
         # new value on this run.
         widget_key = k(field)
-        if value is None:
+        if coerced is None:
             st.session_state.pop(widget_key, None)
         else:
-            st.session_state[widget_key] = value
+            st.session_state[widget_key] = coerced
     audit.building = b
     set_current(audit)
 
