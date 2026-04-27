@@ -9,7 +9,7 @@ sys.path.insert(0, str(_root / "src"))
 
 import streamlit as st  # noqa: E402
 
-from app._state import get_current, set_current  # noqa: E402
+from app._state import ensure_draft_saved, get_current, set_current  # noqa: E402
 from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
 from tadf.legal.loader import for_section  # noqa: E402
 from tadf.llm import (  # noqa: E402
@@ -599,3 +599,10 @@ for i, f in enumerate(audit.findings):
                 if rb.button("❌ Отклонить", key=f"rank_reject_{scope}_{i}"):
                     del st.session_state[_rank_key(i)]
                     st.rerun()
+
+
+# Auto-persist findings to the DB on every rerun. Without this, a browser
+# refresh on the Findings page silently loses every typed-but-not-saved
+# observation/recommendation, since the page-level edits live only in
+# st.session_state until something writes them back through upsert_audit.
+ensure_draft_saved(audit)

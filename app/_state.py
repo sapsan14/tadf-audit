@@ -44,7 +44,14 @@ def _new_audit() -> Audit:
 
 def get_current() -> Audit:
     if "audit" in st.session_state:
-        return st.session_state["audit"]
+        cached = st.session_state["audit"]
+        # Mirror the audit id back into the URL on every page render so
+        # that navigating between pages — or refreshing — never loses
+        # the «which draft is open» pin. Cheap (no DB call), and a no-op
+        # if the URL already has the right value.
+        if cached.id is not None:
+            _sync_audit_id_query_param(cached.id)
+        return cached
 
     # Browser refresh / new session — try to restore from URL ?audit_id=N.
     # `st.query_params` was added in 1.30; fall back gracefully.

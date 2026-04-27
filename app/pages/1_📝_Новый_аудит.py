@@ -25,6 +25,7 @@ from app._state import (  # noqa: E402
 )
 from app._widgets import (  # noqa: E402
     address_picker,
+    autofill_from_picker,
     combobox,
     company_picker,
     flush_improve_pending,
@@ -43,6 +44,8 @@ from tadf.db.lookups import (  # noqa: E402
     client_names,
     composer_companies,
     composer_names,
+    latest_auditor_by_name,
+    latest_client_by_name,
 )
 from tadf.external.links import teatmik_company_url  # noqa: E402
 from tadf.external.registry_codes import reg_code_hint  # noqa: E402
@@ -187,6 +190,51 @@ scope = audit.id or "new"
 
 def k(name: str) -> str:
     return f"a_{scope}_{name}"
+
+
+# ---------------------------------------------------------------------------
+# Auto-fill on combobox-pick — watches the three name comboboxes (composer,
+# reviewer, client) and re-seeds sibling-field widget keys from the most
+# recent matching DB row. Runs BEFORE the form widgets render so the
+# pending-widget machinery (`flush_improve_pending`) can apply the values
+# on the next rerun without Streamlit's "widget already instantiated" error.
+# ---------------------------------------------------------------------------
+_COMPOSER_AUTOFILL = {
+    "kutsetunnistus_no": k("composer_kut"),
+    "qualification": k("composer_qual"),
+    "company": k("composer_company"),
+    "company_reg_nr": k("composer_reg"),
+}
+_REVIEWER_AUTOFILL = {
+    "kutsetunnistus_no": k("reviewer_kut"),
+    "qualification": k("reviewer_qual"),
+    "company": k("reviewer_company"),
+    "company_reg_nr": k("reviewer_reg"),
+}
+_CLIENT_AUTOFILL = {
+    "reg_code": k("client_reg"),
+    "contact_email": k("client_email"),
+    "contact_phone": k("client_phone"),
+    "address": k("client_addr"),
+}
+autofill_from_picker(
+    slot=f"composer_{scope}",
+    name_widget_key=k("composer_name"),
+    field_to_widget=_COMPOSER_AUTOFILL,
+    fetch=latest_auditor_by_name,
+)
+autofill_from_picker(
+    slot=f"reviewer_{scope}",
+    name_widget_key=k("reviewer_name"),
+    field_to_widget=_REVIEWER_AUTOFILL,
+    fetch=latest_auditor_by_name,
+)
+autofill_from_picker(
+    slot=f"client_{scope}",
+    name_widget_key=k("client_name"),
+    field_to_widget=_CLIENT_AUTOFILL,
+    fetch=latest_client_by_name,
+)
 
 
 st.header("Метаданные аудита")

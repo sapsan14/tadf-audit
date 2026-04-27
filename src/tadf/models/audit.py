@@ -52,6 +52,14 @@ class Audit(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     photos: list[Photo] = Field(default_factory=list)
 
+    # Optional auditor-supplied overrides for the per-page header/footer text.
+    # When None, the docx renderer falls back to a value computed from the
+    # other audit fields (Töö nr / Töö nimetus / Pädev isik). When set, the
+    # override is used verbatim. Persisted on the draft so the next save
+    # round-trip keeps it.
+    header_override: str | None = None
+    footer_override: str | None = None
+
     status: AuditStatus = "draft"
     created_at: datetime | None = None
     updated_at: datetime | None = None
