@@ -82,33 +82,33 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
 }}
 
 /* ---- Logo: fixed-square, flex-centered ----
-   Streamlit's testid is `stSidebarLogo` (NOT `stLogo` — earlier guess was
-   wrong, which is why the previous size rule never applied and the logo
-   rendered at Streamlit's default "large" size with the bottom cropped).
-   Some Streamlit builds render an <img>, others render a div with
-   background-image — cover both. */
+   Streamlit's testid is `stSidebarLogo` (NOT `stLogo`). The actual <img>
+   is an emotion-styled component (`Ms`) whose CSS forces
+   `objectPosition: left` — that's why the SVG appeared left-anchored
+   in a wider IMG box. We override BOTH the IMG size (force a square)
+   and the object-position (center) so the SVG sits centered. The
+   `class="stLogo"` selector is redundant with [data-testid] but adds
+   specificity that beats emotion's atomic class. */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
     padding: 1.5rem 0.5rem 1rem 0.5rem !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stSidebarLogo"] {{
-    height: 110px !important;
-    max-height: 110px !important;
-    width: 110px !important;
-    max-width: 110px !important;
-    background-size: contain !important;
-    background-position: center !important;
-    background-repeat: no-repeat !important;
-    object-fit: contain !important;
-}}
+section[data-testid="stSidebar"] [data-testid="stSidebarLogo"],
+section[data-testid="stSidebar"] img.stLogo,
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
     height: 110px !important;
     max-height: 110px !important;
-    width: auto !important;
-    max-width: 100% !important;
+    width: 110px !important;
+    min-width: 110px !important;
+    max-width: 110px !important;
     object-fit: contain !important;
+    object-position: center !important;
+    background-size: contain !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    margin: 0 auto !important;
 }}
 
 /* ---- Footer pinned at the very bottom of the sidebar ---- */
