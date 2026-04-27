@@ -180,8 +180,7 @@ _BOOKMARKLET_SRC = (
 st.markdown(
     """
 1. **Откройте панель закладок в браузере.**
-   - Chrome / Edge: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
-   - Firefox: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>
+   - Chrome / Edge / Firefox: `Ctrl + Shift + B` (Windows / Linux), `⌘ + Shift + B` (Mac)
    - Safari: меню *Bookmarks → Show Bookmarks Bar*
 2. **Перетащите кнопку ниже на панель закладок.** Drag-and-drop, как
    обычную ссылку.
