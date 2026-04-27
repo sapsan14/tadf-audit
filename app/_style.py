@@ -72,25 +72,35 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
     margin-bottom: 0.25rem !important;
 }}
 
-/* ---- Logo: centered, height-bounded so it doesn't overlap the nav ----
-   The SVG artwork is square (viewBox 800×800), so stretching width to 100%
-   of the sidebar produced a ~240px-tall square that crashed into the first
-   menu item. Cap by height instead and let width scale proportionally. */
+/* ---- Logo: fixed-square, centered ----
+   The SVG artwork is square (viewBox 800×800). st.logo() renders the image
+   either as <img> or as a div with background-image (varies by Streamlit
+   build), so we fix BOTH dimensions explicitly. Earlier attempts at
+   width:100% blew the logo up to overflow the nav; height:auto+max-height
+   collapsed the background-image variant to 0×0. */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
-    padding: 0.75rem 0.75rem 0.5rem 0.75rem !important;
+    padding: 1rem 0.75rem 0.5rem 0.75rem !important;
+    text-align: center !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > a,
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > div {{
-    max-width: 100% !important;
-    display: flex !important;
-    justify-content: center !important;
+    display: inline-block !important;
+    margin: 0 auto !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stLogo"],
+section[data-testid="stSidebar"] [data-testid="stLogo"] {{
+    height: 96px !important;
+    width: 96px !important;
+    background-size: contain !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    margin: 0 auto !important;
+    display: block !important;
+    object-fit: contain !important;
+}}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
+    height: 96px !important;
     width: auto !important;
     max-width: 100% !important;
-    height: auto !important;
-    max-height: 96px !important;
     margin: 0 auto !important;
     display: block !important;
     object-fit: contain !important;
@@ -110,11 +120,15 @@ section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
     text-decoration: none;
     border-bottom: 1px dotted rgba(128, 128, 128, 0.5);
 }}
-/* Push the footer's wrapper element (and any of its parents up to the
-   stSidebarUserContent flex column) to the bottom via margin-top:auto.
+/* Pin the footer to the very bottom of the sidebar:
+   - order: 999 forces its flex item to render visually last regardless of
+     where in the DOM it was inserted (the footer is rendered *before* the
+     auth gate so it shows on the login screen, but it must still sit
+     under the post-auth user/logout block).
+   - margin-top: auto consumes any leftover vertical space above it.
    :has() is widely supported (Chrome 105+, Safari 15.4+, Firefox 121+). */
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.tadf-sidebar-footer),
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:last-child {{
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.tadf-sidebar-footer) {{
+    order: 999 !important;
     margin-top: auto !important;
 }}
 </style>
