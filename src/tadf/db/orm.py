@@ -180,6 +180,28 @@ class PendingImportRow(Base):
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class LookupHiddenRow(Base):
+    """Per-field-type blocklist for combobox autocomplete suggestions.
+
+    The auditor can hide stale / typo / test values from the autocomplete
+    dropdown without deleting the underlying audit data. The blocklist
+    is keyed on `(kind, value)` pairs (`kind` ∈ {"client_name",
+    "composer_name", "composer_company", "building_address", …}); values
+    are matched case-insensitively at the suggestion-layer (see
+    `tadf.db.lookups`).
+
+    No FK to Audit/Client/etc. — the blocklist survives audit deletion
+    so a hidden typo never resurfaces if the auditor saves a fresh
+    audit by accident.
+    """
+
+    __tablename__ = "lookup_hidden"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    value: Mapped[str] = mapped_column(String(500), index=True)
+    hidden_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class LlmUsageRow(Base):
     """One row per Claude API call. Persists across deploys (lives in the
     SQLite file in tadf-data volume on Hetzner). Replaces the JSONL log

@@ -40,13 +40,24 @@ from tadf.api.imports import (  # noqa: E402
 )
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
 from tadf.db.lookups import (  # noqa: E402
+    KIND_BUILDING_ADDRESS,
+    KIND_BUILDING_USE_PURPOSE,
+    KIND_CLIENT_NAME,
+    KIND_COMPOSER_COMPANY,
+    KIND_COMPOSER_NAME,
+    auditor_by_name,
+    building_addresses,
+    building_use_purposes,
+    client_by_name,
     client_names,
     composer_companies,
     composer_names,
+    hidden_lookups,
+    hide_lookup,
+    unhide_lookup,
 )
 from tadf.external.links import teatmik_company_url  # noqa: E402
 from tadf.external.registry_codes import reg_code_hint  # noqa: E402
-from tadf.models import Auditor  # noqa: E402
 
 flush_improve_pending()
 
@@ -189,6 +200,143 @@ def k(name: str) -> str:
     return f"a_{scope}_{name}"
 
 
+# ---------------------------------------------------------------------------
+# Pending-slot application for picker / autofill writes that need to happen
+# BEFORE any form widget renders. Pattern matches the Здание page (commit
+# e48387c): a callback queues `{model_field: value, …}` into one of these
+# slots and calls `st.rerun()`; here we apply, mirror into the widget's
+# session_state key, and let the form re-seed normally.
+#
+# Why a slot and not a direct write inside the callback? Streamlit forbids
+# writing to `st.session_state[widget_key]` after the widget for that key
+# has been instantiated in the same run — and our pickers (Ariregister,
+# Teatmik fallback) live near the bottom of the page, so by the time their
+# `on_select` fires, every form field above has already rendered. The slot
+# defers the write to the very top of the next run instead.
+# ---------------------------------------------------------------------------
+_PENDING_CLIENT_KEY = f"_pending_client_apply_{scope}"
+_PENDING_COMPOSER_KEY = f"_pending_composer_apply_{scope}"
+_PENDING_REVIEWER_KEY = f"_pending_reviewer_apply_{scope}"
+
+_CLIENT_FIELD_TO_WIDGET = {
+    "name": k("client_name"),
+    "reg_code": k("client_reg"),
+    "contact_email": k("client_email"),
+    "contact_phone": k("client_phone"),
+    "address": k("client_addr"),
+}
+_COMPOSER_FIELD_TO_WIDGET = {
+    "full_name": k("composer_name"),
+    "kutsetunnistus_no": k("composer_kut"),
+    "qualification": k("composer_qual"),
+    "company": k("composer_company"),
+    "company_reg_nr": k("composer_reg"),
+}
+_REVIEWER_FIELD_TO_WIDGET = {
+    "full_name": k("reviewer_name"),
+    "kutsetunnistus_no": k("reviewer_kut"),
+    "qualification": k("reviewer_qual"),
+    "company": k("reviewer_company"),
+    "company_reg_nr": k("reviewer_reg"),
+}
+
+
+def _apply_pending_to(target, pending: dict, mapping: dict[str, str]) -> None:
+    for field, value in pending.items():
+        if value is None:
+            continue
+        if hasattr(target, field):
+            setattr(target, field, value)
+        widget_key = mapping.get(field)
+        if widget_key:
+            st.session_state[widget_key] = value
+
+
+if _PENDING_CLIENT_KEY in st.session_state:
+    pending = st.session_state.pop(_PENDING_CLIENT_KEY)
+    if audit.client is None:
+        from tadf.models import Client as _Client
+
+        audit.client = _Client(name="")
+    _apply_pending_to(audit.client, pending, _CLIENT_FIELD_TO_WIDGET)
+    set_current(audit)
+
+if _PENDING_COMPOSER_KEY in st.session_state:
+    pending = st.session_state.pop(_PENDING_COMPOSER_KEY)
+    _apply_pending_to(audit.composer, pending, _COMPOSER_FIELD_TO_WIDGET)
+    set_current(audit)
+
+if _PENDING_REVIEWER_KEY in st.session_state:
+    pending = st.session_state.pop(_PENDING_REVIEWER_KEY)
+    _apply_pending_to(audit.reviewer, pending, _REVIEWER_FIELD_TO_WIDGET)
+    set_current(audit)
+
+
+def _autofill_client_from_history(picked_name: str) -> bool:
+    """If the auditor picked a name we've seen before, fill any companion
+    field that's currently empty (reg_code, address, email, phone) from
+    the most recent matching DB row. Writes both the model and the widget
+    session_state key in one go — safe because this function runs while
+    we're between the name combobox (which has rendered) and the
+    reg_code/email/phone/address widgets (which haven't yet)."""
+    past = client_by_name(picked_name)
+    if past is None:
+        return False
+    if audit.client is None:
+        from tadf.models import Client as _Client
+
+        audit.client = _Client(name=picked_name)
+    filled_any = False
+    for field, source_value in (
+        ("reg_code", past.reg_code),
+        ("address", past.address),
+        ("contact_email", past.contact_email),
+        ("contact_phone", past.contact_phone),
+    ):
+        if not source_value:
+            continue
+        current_value = (getattr(audit.client, field) or "").strip()
+        if current_value:
+            continue
+        setattr(audit.client, field, source_value)
+        widget_key = _CLIENT_FIELD_TO_WIDGET.get(field)
+        if widget_key:
+            st.session_state[widget_key] = source_value
+        filled_any = True
+    return filled_any
+
+
+def _autofill_auditor_from_history(slot: str, picked_name: str) -> bool:
+    """Companion of `_autofill_client_from_history` for composer/reviewer.
+    `slot` is "composer" or "reviewer"; only empty companion fields get
+    filled (kutsetunnistus_no, qualification, company, company_reg_nr)."""
+    past = auditor_by_name(picked_name)
+    if past is None:
+        return False
+    target = audit.composer if slot == "composer" else audit.reviewer
+    mapping = (
+        _COMPOSER_FIELD_TO_WIDGET if slot == "composer" else _REVIEWER_FIELD_TO_WIDGET
+    )
+    filled_any = False
+    for field, source_value in (
+        ("kutsetunnistus_no", past.kutsetunnistus_no),
+        ("qualification", past.qualification),
+        ("company", past.company),
+        ("company_reg_nr", past.company_reg_nr),
+    ):
+        if not source_value:
+            continue
+        current_value = (getattr(target, field) or "").strip()
+        if current_value:
+            continue
+        setattr(target, field, source_value)
+        widget_key = mapping.get(field)
+        if widget_key:
+            st.session_state[widget_key] = source_value
+        filled_any = True
+    return filled_any
+
+
 st.header("Метаданные аудита")
 
 col1, col2, col3 = st.columns(3)
@@ -307,7 +455,11 @@ col1, col2 = st.columns(2)
 # rows line up horizontally between «Auditi koostas» and «Auditi
 # kontrollis». A composer typically has empty Kutsetunnistus; a reviewer
 # typically has empty Reg. nr (same firm as composer) — that's fine,
-# the layout stays symmetric.
+# the layout stays symmetric. Each block is assigned field-by-field
+# (rather than via one big `Auditor(...)` constructor) so the autofill-
+# from-history check between the name combobox and the kut/qual/company/
+# reg fields can pre-seed `st.session_state[widget_key]` BEFORE the
+# downstream widgets render.
 with col1:
     st.subheader("Auditi koostas")
     # Two lines so this caption matches the height of the right-hand
@@ -317,42 +469,54 @@ with col1:
         "Инженер, который физически готовит отчёт. "
         "Может совпадать с проверяющим (тогда продублируйте поля справа)."
     )
-    audit.composer = Auditor(
-        full_name=combobox(
-            "Имя",
-            suggestions=composer_names(),
-            value=audit.composer.full_name,
-            key=k("composer_name"),
-            help="ФИО составителя. Подсказки — из прошлых аудитов.",
-        ) or "",
-        kutsetunnistus_no=st.text_input(
-            "Kutsetunnistus №",
-            value=audit.composer.kutsetunnistus_no or "",
-            key=k("composer_kut"),
-            help="Если у составителя нет kutsetunnistus — оставьте пустым.",
-        ) or None,
-        qualification=st.text_input(
-            "Квалификация",
-            value=audit.composer.qualification or "",
-            key=k("composer_qual"),
-            help="Например «Diplomeeritud ehitusinsener tase 7».",
-        ) or None,
-        company=combobox(
-            "Компания",
-            suggestions=composer_companies(),
-            value=audit.composer.company,
-            key=k("composer_company"),
-            help="Юр. лицо составителя (например TADF Ehitus OÜ).",
+
+    _prev_composer_name = st.session_state.get(f"_seen_composer_name_{scope}")
+    audit.composer.full_name = combobox(
+        "Имя",
+        suggestions=composer_names(),
+        value=audit.composer.full_name,
+        key=k("composer_name"),
+        help=(
+            "ФИО составителя. Подсказки — из прошлых аудитов; выбор имени "
+            "из списка автозаполнит Kutsetunnistus, квалификацию и компанию."
         ),
-        company_reg_nr=(
-            _composer_reg := st.text_input(
-                "Reg. nr",
-                value=audit.composer.company_reg_nr or "",
-                key=k("composer_reg"),
-                help="Регистрационный код компании составителя (8 цифр для OÜ).",
-            )
-        ) or None,
+    ) or ""
+    if f"_seen_composer_name_{scope}" not in st.session_state:
+        st.session_state[f"_seen_composer_name_{scope}"] = audit.composer.full_name
+    elif (
+        audit.composer.full_name
+        and audit.composer.full_name != _prev_composer_name
+    ):
+        if _autofill_auditor_from_history("composer", audit.composer.full_name):
+            st.toast(f"📋 Составитель: {audit.composer.full_name} — данные подтянуты")
+        st.session_state[f"_seen_composer_name_{scope}"] = audit.composer.full_name
+
+    audit.composer.kutsetunnistus_no = st.text_input(
+        "Kutsetunnistus №",
+        value=audit.composer.kutsetunnistus_no or "",
+        key=k("composer_kut"),
+        help="Если у составителя нет kutsetunnistus — оставьте пустым.",
+    ) or None
+    audit.composer.qualification = st.text_input(
+        "Квалификация",
+        value=audit.composer.qualification or "",
+        key=k("composer_qual"),
+        help="Например «Diplomeeritud ehitusinsener tase 7».",
+    ) or None
+    audit.composer.company = combobox(
+        "Компания",
+        suggestions=composer_companies(),
+        value=audit.composer.company,
+        key=k("composer_company"),
+        help="Юр. лицо составителя (например TADF Ehitus OÜ).",
     )
+    _composer_reg = st.text_input(
+        "Reg. nr",
+        value=audit.composer.company_reg_nr or "",
+        key=k("composer_reg"),
+        help="Регистрационный код компании составителя (8 цифр для OÜ).",
+    )
+    audit.composer.company_reg_nr = _composer_reg or None
     hint_caption(reg_code_hint(_composer_reg))
 with col2:
     st.subheader("Auditi kontrollis (vastutav pädev isik)")
@@ -360,137 +524,123 @@ with col2:
         "Сертифицированное лицо (kutsetunnistus), которое юридически отвечает "
         "за отчёт и подписывает его. По умолчанию — Фёдор."
     )
-    audit.reviewer = Auditor(
-        full_name=combobox(
-            "Имя",
-            suggestions=composer_names(),
-            value=audit.reviewer.full_name,
-            key=k("reviewer_name"),
-            help="ФИО ответственного лица (vastutav pädev isik).",
-        ) or "",
-        kutsetunnistus_no=st.text_input(
-            "Kutsetunnistus №",
-            value=audit.reviewer.kutsetunnistus_no or "",
-            key=k("reviewer_kut"),
-            help=(
-                "Номер kutsetunnistus — обязательное поле по §5. У Фёдора 148515. "
-                "Проверить актуальность можно на kutsekoda.ee."
-            ),
-        ) or None,
-        qualification=st.text_input(
-            "Квалификация",
-            value=audit.reviewer.qualification or "Diplomeeritud insener tase 7",
-            key=k("reviewer_qual"),
-        ) or None,
-        company=combobox(
-            "Компания",
-            suggestions=composer_companies(),
-            value=audit.reviewer.company or "TADF Ehitus OÜ",
-            key=k("reviewer_company"),
+
+    _prev_reviewer_name = st.session_state.get(f"_seen_reviewer_name_{scope}")
+    audit.reviewer.full_name = combobox(
+        "Имя",
+        suggestions=composer_names(),
+        value=audit.reviewer.full_name,
+        key=k("reviewer_name"),
+        help=(
+            "ФИО ответственного лица (vastutav pädev isik). Выбор имени из "
+            "списка автозаполнит Kutsetunnistus, квалификацию и компанию."
         ),
-        company_reg_nr=(
-            _reviewer_reg := st.text_input(
-                "Reg. nr",
-                value=audit.reviewer.company_reg_nr or "",
-                key=k("reviewer_reg"),
-                help="Если совпадает с компанией составителя — оставьте пустым.",
-            )
-        ) or None,
+    ) or ""
+    if f"_seen_reviewer_name_{scope}" not in st.session_state:
+        st.session_state[f"_seen_reviewer_name_{scope}"] = audit.reviewer.full_name
+    elif (
+        audit.reviewer.full_name
+        and audit.reviewer.full_name != _prev_reviewer_name
+    ):
+        if _autofill_auditor_from_history("reviewer", audit.reviewer.full_name):
+            st.toast(f"📋 Проверяющий: {audit.reviewer.full_name} — данные подтянуты")
+        st.session_state[f"_seen_reviewer_name_{scope}"] = audit.reviewer.full_name
+
+    audit.reviewer.kutsetunnistus_no = st.text_input(
+        "Kutsetunnistus №",
+        value=audit.reviewer.kutsetunnistus_no or "",
+        key=k("reviewer_kut"),
+        help=(
+            "Номер kutsetunnistus — обязательное поле по §5. У Фёдора 148515. "
+            "Проверить актуальность можно на kutsekoda.ee."
+        ),
+    ) or None
+    audit.reviewer.qualification = st.text_input(
+        "Квалификация",
+        value=audit.reviewer.qualification or "Diplomeeritud insener tase 7",
+        key=k("reviewer_qual"),
+    ) or None
+    audit.reviewer.company = combobox(
+        "Компания",
+        suggestions=composer_companies(),
+        value=audit.reviewer.company or "TADF Ehitus OÜ",
+        key=k("reviewer_company"),
     )
+    _reviewer_reg = st.text_input(
+        "Reg. nr",
+        value=audit.reviewer.company_reg_nr or "",
+        key=k("reviewer_reg"),
+        help="Если совпадает с компанией составителя — оставьте пустым.",
+    )
+    audit.reviewer.company_reg_nr = _reviewer_reg or None
     hint_caption(reg_code_hint(_reviewer_reg))
 
 st.header("Заказчик (Tellija)")
-st.caption("Лицо или организация, заказавшая аудит. Указывается на титульном листе.")
+st.caption(
+    "Лицо или организация, заказавшая аудит. Введите название — "
+    "Ariregister или Teatmik сами заполнят рег-код и адрес. "
+    "Если имя уже встречалось в прошлых аудитах, e-mail / телефон / "
+    "адрес автозаполнятся по последней записи."
+)
 if audit.client is None:
     from tadf.models import Client
 
     audit.client = Client(name="")
+
+# 1) Name combobox — the primary entry point. The auditor either picks a
+#    past client from the dropdown (autofill kicks in below) or types a
+#    fresh name (Ariregister picker handles that path).
+_prev_client_name = st.session_state.get(f"_seen_client_name_{scope}")
 audit.client.name = combobox(
     "Название / имя",
     suggestions=client_names(),
     value=audit.client.name,
     key=k("client_name"),
-    help="Название организации или ФИО физ. лица. Подсказки — из прошлых аудитов.",
-) or ""
-col1, col2, col3 = st.columns(3)
-with col1:
-    audit.client.reg_code = st.text_input(
-        "Reg. kood",
-        value=audit.client.reg_code or "",
-        key=k("client_reg"),
-        help="Регистрационный код юр. лица заказчика (если есть). Для физ. лица оставить пустым.",
-    ) or None
-    hint_caption(reg_code_hint(audit.client.reg_code))
-with col2:
-    audit.client.contact_email = st.text_input(
-        "E-mail", value=audit.client.contact_email or "", key=k("client_email")
-    ) or None
-with col3:
-    audit.client.contact_phone = st.text_input(
-        "Телефон", value=audit.client.contact_phone or "", key=k("client_phone")
-    ) or None
-def _apply_inads_to_client(hit) -> None:  # type: AddressHit
-    audit.client.address = hit.address
-    set_current(audit)
-    # Force the text_input below to reseed from the new model value.
-    st.session_state.pop(k("client_addr"), None)
-    st.session_state.pop(f"_addr_search_client_{scope}", None)
-    st.session_state.pop(f"_addr_q_client_{scope}", None)
-    st.rerun()
-
-
-address_picker(
-    key_prefix=f"client_{scope}",
-    on_select=_apply_inads_to_client,
-    label="🔎 Найти адрес заказчика в Maa-amet",
-)
-
-audit.client.address = st.text_input(
-    "Адрес заказчика",
-    value=audit.client.address or "",
-    key=k("client_addr"),
     help=(
-        "Адрес для переписки с заказчиком (может отличаться от адреса объекта). "
-        "Можно набрать вручную или выбрать через поиск выше."
+        "Название организации или ФИО физ. лица. Подсказки — из прошлых "
+        "аудитов; выбор имени из списка автозаполнит rep-код, e-mail, "
+        "телефон и адрес из последней соответствующей записи."
     ),
-) or None
-improve_button_for(
-    text=audit.client.address or "",
-    state_key_prefix=f"imp_client_addr_{scope}",
-    section_ref=None,
-    text_widget_key=k("client_addr"),
-    apply=lambda v: setattr(audit.client, "address", v),
-)
+) or ""
+# 2) Autofill from history — runs the moment the auditor changed the name
+#    (typed an existing one or picked from the dropdown). Companion fields
+#    that are still empty get filled from the most recent matching record.
+#    The session-state slot is initialised on the very first render so a
+#    page-load with an already-loaded draft doesn't trigger autofill.
+if f"_seen_client_name_{scope}" not in st.session_state:
+    st.session_state[f"_seen_client_name_{scope}"] = audit.client.name or ""
+elif (
+    audit.client.name
+    and audit.client.name != _prev_client_name
+):
+    if _autofill_client_from_history(audit.client.name):
+        st.toast(f"📋 Автозаполнено из прошлой записи: {audit.client.name}")
+    st.session_state[f"_seen_client_name_{scope}"] = audit.client.name
 
-# Auto-save the draft now that the metadata + client form fields above
-# have rendered and committed their values. As soon as the user types
-# anything (purpose, client name, reg-code, etc.) audit.id is assigned —
-# token-based features (Teatmik link, pending-imports) start working
-# immediately, no manual «Save draft» click required. We DON'T rotate
-# `scope` mid-render to avoid widget-key drift; values are preserved via
-# the model on the next render's `value=` parameter.
-ensure_draft_saved(audit)
 
-# Ariregister company picker — primary path. Replaces the Teatmik
-# bookmarklet flow with a one-click in-app search against the official
-# RIK autocomplete API (no auth, no CAPTCHA).
+# 3) Ariregister picker — primary search path right under the name field
+#    so the auditor sees it before the manual fields below. Pending-slot
+#    pattern (see top-of-page) so the click reliably mutates the form
+#    even though it lives near the bottom of the previous render.
 
 
 def _apply_company_to_client(hit) -> None:  # type: CompanyHit
-    if audit.client is None:
-        from tadf.models import Client as _Client
-        audit.client = _Client(name="")
-    audit.client.name = hit.name
-    audit.client.reg_code = hit.reg_code
+    pending: dict = {
+        "name": hit.name,
+        "reg_code": hit.reg_code,
+    }
     if hit.address:
-        audit.client.address = hit.address
-    set_current(audit)
-    # Reseed any widgets we just changed.
-    for w in (k("client_name"), k("client_reg"), k("client_addr")):
-        st.session_state.pop(w, None)
+        pending["address"] = hit.address
+    st.session_state[_PENDING_CLIENT_KEY] = pending
     # Collapse the picker.
     st.session_state.pop(f"_co_search_client_{scope}", None)
     st.session_state.pop(f"_co_q_client_{scope}", None)
+    # NOTE: we deliberately do NOT pop `_seen_client_name_{scope}`. Keeping
+    # the previous value lets the autofill-from-history check on the next
+    # render see "name just changed" and pull email/phone/address from a
+    # past matching record (Ariregister Tier-1 doesn't return those).
+    # The autofill itself only fills EMPTY fields, so the picker's
+    # name/reg_code/address aren't overwritten.
     st.rerun()
 
 
@@ -500,10 +650,8 @@ company_picker(
     label="🔎 Найти заказчика в Ariregister",
 )
 
-# Optional fallback — the old Teatmik bookmarklet/userscript flow remains
-# fully functional behind a feature flag (see «Подключения» page). Hidden
-# inside a collapsed expander so it doesn't compete with Ariregister for
-# attention but stays one click away if Ariregister ever fails.
+# 4) Optional Teatmik fallback (bookmarklet/userscript). Hidden behind an
+#    expander since Ariregister covers the common case in-app.
 if feature_flags.teatmik_enabled():
     with st.expander("🌐 Альтернативный источник: Teatmik (резерв)", expanded=False):
         # Single search query: prefer (in order) the Ariregister picker's
@@ -538,6 +686,70 @@ if feature_flags.teatmik_enabled():
             "💡 Импорт работает после установки bookmarklet / Tampermonkey — "
             "см. страницу **🔌 Подключения**."
         )
+
+# 5) Manual / editable fields — collapsible so they don't shout for
+#    attention when the picker filled them; the auditor can still edit
+#    them by hand or correct what the picker brought back.
+with st.expander("📝 Реквизиты вручную (rep-код, e-mail, телефон, адрес)", expanded=True):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        audit.client.reg_code = st.text_input(
+            "Reg. kood",
+            value=audit.client.reg_code or "",
+            key=k("client_reg"),
+            help=(
+                "Регистрационный код юр. лица заказчика (если есть). "
+                "Для физ. лица оставить пустым."
+            ),
+        ) or None
+        hint_caption(reg_code_hint(audit.client.reg_code))
+    with col2:
+        audit.client.contact_email = st.text_input(
+            "E-mail", value=audit.client.contact_email or "", key=k("client_email")
+        ) or None
+    with col3:
+        audit.client.contact_phone = st.text_input(
+            "Телефон", value=audit.client.contact_phone or "", key=k("client_phone")
+        ) or None
+
+    def _apply_inads_to_client(hit) -> None:  # type: AddressHit
+        st.session_state[_PENDING_CLIENT_KEY] = {"address": hit.address}
+        st.session_state.pop(f"_addr_search_client_{scope}", None)
+        st.session_state.pop(f"_addr_q_client_{scope}", None)
+        st.rerun()
+
+
+    address_picker(
+        key_prefix=f"client_{scope}",
+        on_select=_apply_inads_to_client,
+        label="🔎 Найти адрес заказчика в Maa-amet",
+    )
+
+    audit.client.address = st.text_input(
+        "Адрес заказчика",
+        value=audit.client.address or "",
+        key=k("client_addr"),
+        help=(
+            "Адрес для переписки с заказчиком (может отличаться от адреса объекта). "
+            "Можно набрать вручную или выбрать через поиск выше."
+        ),
+    ) or None
+    improve_button_for(
+        text=audit.client.address or "",
+        state_key_prefix=f"imp_client_addr_{scope}",
+        section_ref=None,
+        text_widget_key=k("client_addr"),
+        apply=lambda v: setattr(audit.client, "address", v),
+    )
+
+# Auto-save the draft now that the metadata + client form fields above
+# have rendered and committed their values. As soon as the user types
+# anything (purpose, client name, reg-code, etc.) audit.id is assigned —
+# token-based features (Teatmik link, pending-imports) start working
+# immediately, no manual «Save draft» click required. We DON'T rotate
+# `scope` mid-render to avoid widget-key drift; values are preserved via
+# the model on the next render's `value=` parameter.
+ensure_draft_saved(audit)
 
 # ---------------------------------------------------------------------------
 # 📥 Pending imports from Teatmik bookmarklet/userscript with target=client.
@@ -607,6 +819,65 @@ def _render_pending_client_imports() -> None:
 
 if feature_flags.teatmik_enabled():
     _render_pending_client_imports()
+
+# ---------------------------------------------------------------------------
+# 🧹 Manage autocomplete suggestions
+# Lets the auditor hide stale / typo / test values from the combobox
+# dropdowns without touching the underlying audit data. Hidden values
+# can be restored at any time. Listed grouped by kind (client names,
+# composer names, etc.) so it's easy to see which dropdown each value
+# came from.
+# ---------------------------------------------------------------------------
+with st.expander("🧹 Управление подсказками", expanded=False):
+    st.caption(
+        "Скрывайте опечатки и устаревшие записи из выпадающих списков. "
+        "Удаление здесь не затрагивает существующие аудиты — только "
+        "автозаполнение. Скрытое всегда можно вернуть."
+    )
+
+    _BLOCKLIST_GROUPS: list[tuple[str, str, list[str]]] = [
+        ("Клиенты", KIND_CLIENT_NAME, client_names()),
+        ("Аудиторы (имена)", KIND_COMPOSER_NAME, composer_names()),
+        ("Компании аудиторов", KIND_COMPOSER_COMPANY, composer_companies()),
+        ("Адреса зданий", KIND_BUILDING_ADDRESS, building_addresses()),
+        ("Назначение здания", KIND_BUILDING_USE_PURPOSE, building_use_purposes()),
+    ]
+
+    for label, kind, active_values in _BLOCKLIST_GROUPS:
+        hidden_values = hidden_lookups(kind)
+        if not active_values and not hidden_values:
+            continue
+        st.markdown(f"**{label}**")
+        if active_values:
+            for value in active_values:
+                rc1, rc2 = st.columns([6, 1])
+                rc1.markdown(f"<small>{value}</small>", unsafe_allow_html=True)
+                if rc2.button(
+                    "🗑️",
+                    key=f"hide_{kind}_{value}",
+                    help=f"Скрыть «{value}» из подсказок (восстановить можно ниже)",
+                    use_container_width=True,
+                ):
+                    hide_lookup(kind, value)
+                    st.rerun()
+        if hidden_values:
+            st.caption("Скрытые:")
+            for value in hidden_values:
+                rc1, rc2 = st.columns([6, 1])
+                rc1.markdown(
+                    f"<small><s>{value}</s></small>",
+                    unsafe_allow_html=True,
+                )
+                if rc2.button(
+                    "↻",
+                    key=f"unhide_{kind}_{value}",
+                    help=f"Вернуть «{value}» в подсказки",
+                    use_container_width=True,
+                ):
+                    unhide_lookup(kind, value)
+                    st.rerun()
+        st.divider()
+
 
 set_current(audit)
 st.success(f"Текущий номер: **{audit.display_no()}** ({audit.type} / {audit.subtype})")
