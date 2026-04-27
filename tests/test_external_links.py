@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from tadf.external.links import ehr_building_url, teatmik_company_url
+from tadf.external.links import (
+    ehr_building_url,
+    maaamet_kataster_url,
+    teatmik_company_url,
+)
 
 
 def test_ehr_link_by_code() -> None:
@@ -56,3 +60,21 @@ def test_teatmik_url_encodes_special_chars() -> None:
 def test_teatmik_empty_returns_none() -> None:
     assert teatmik_company_url("") is None
     assert teatmik_company_url("   ") is None
+
+
+def test_maaamet_url_uses_xgis2_kat_tunnus() -> None:
+    url = maaamet_kataster_url("85101:004:0020")
+    assert url is not None
+    # Must hit the new xgis2 maainfo endpoint with the documented params,
+    # not the legacy geoportaal Kinnistu-otsing form (which silently
+    # redirected and dropped query strings — see commit fixing #N).
+    assert url.startswith("https://xgis.maaamet.ee/xgis2/page/app/maainfo")
+    assert "ALAJAOTUS=KIRG_KATASTRIYKSUSED" in url
+    # `:` must be percent-encoded inside the value
+    assert "85101%3A004%3A0020" in url
+
+
+def test_maaamet_url_none_for_empty_input() -> None:
+    assert maaamet_kataster_url(None) is None
+    assert maaamet_kataster_url("") is None
+    assert maaamet_kataster_url("   ") is None

@@ -53,4 +53,26 @@ def teatmik_company_url(query: str) -> str | None:
     return f"https://www.teatmik.ee/et/search/{quote(q)}"
 
 
-__all__ = ["ehr_building_url", "teatmik_company_url"]
+def maaamet_kataster_url(kataster_no: str | None) -> str | None:
+    """Deep link to Maa-amet «Kinnistu otsing» pre-filled with the
+    katastritunnus.
+
+    The legacy `geoportaal.maaamet.ee/.../Kinnistu-otsing-p82.html?otsing=…`
+    URL silently redirects to xgis2 and drops the query-string in the
+    process — that's why our old "🗺️ Maa-amet" button used to land on
+    a blank xgis2 home page.
+
+    The xgis2 maainfo viewer accepts a `KAT_TUNNUS=<katastritunnus>` query
+    parameter together with `ALAJAOTUS=KIRG_KATASTRIYKSUSED` to zoom
+    directly to the parcel.
+    """
+    k = (kataster_no or "").strip()
+    if not k:
+        return None
+    return (
+        "https://xgis.maaamet.ee/xgis2/page/app/maainfo"
+        f"?ALAJAOTUS=KIRG_KATASTRIYKSUSED&KAT_TUNNUS={quote(k)}"
+    )
+
+
+__all__ = ["ehr_building_url", "maaamet_kataster_url", "teatmik_company_url"]
