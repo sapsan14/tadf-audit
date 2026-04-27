@@ -91,9 +91,78 @@ st.markdown(
 """
 )
 
-# The bookmarklet itself — a minified version that postsa to TADF. Token
-# is read from URL fragment exactly like the userscript does.
-_BOOKMARKLET_SRC = """javascript:(async()=>{const TADF='https://tadf-audit.h2oatlas.ee';const h=location.hash.replace(/^#/,'');let aid=null,tok=null;for(const p of h.split('&')){const[k,v]=p.split('=');if(k==='tadf'&&v){tok=decodeURIComponent(v);const c=tok.split(':');if(c.length===3)aid=parseInt(c[0],10);}}if(!aid){alert('TADF: открой страницу из кнопки в TADF (нет токена в URL)');return;}let payload={},path;if(location.hostname.includes('ehr.ee')){const m=location.pathname.match(/buildings\\/(\\d+)/);if(!m){alert('TADF: это не страница здания EHR');return;}const code=m[1];try{const r=await fetch('/api/building/v3/'+code,{credentials:'include'});payload=r.ok?await r.json():{ehr_code:code,_error:r.status};}catch(e){payload={ehr_code:code,_error:String(e)};}path='/api/import-ehr/';payload.ehr_code=code;}else if(location.hostname.includes('teatmik.ee')){const m=location.pathname.match(/personlegal\\/(\\d+)/);if(!m){alert('TADF: это не карточка компании');return;}const code=m[1];const name=document.querySelector('h1,h2,.company-name')?.textContent?.trim();let addr=null,status=null;document.querySelectorAll('dt,th,.label').forEach(el=>{const t=(el.textContent||'').toLowerCase();const sib=el.nextElementSibling;if(!sib)return;if((t.includes('aadress')||t.includes('адрес'))&&!addr)addr=sib.textContent.trim();if((t.includes('staatus')||t.includes('статус'))&&!status)status=sib.textContent.trim();});payload={reg_code:code,name,address:addr,status};path='/api/import-teatmik/';}else{alert('TADF: эта страница не EHR/Teatmik');return;}try{const r=await fetch(TADF+path+aid,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok,'X-Source-URL':location.href},body:JSON.stringify(payload),mode:'cors'});if(r.ok)alert('✅ TADF: данные отправлены в аудит #'+aid+'. Возвращайтесь во вкладку TADF.');else alert('❌ TADF: '+r.status+' '+(await r.text()).slice(0,200));}catch(e){alert('❌ TADF недоступен: '+e);}})();"""
+# The bookmarklet — single-line JS the user drags onto their bookmarks
+# bar. Mirrors the userscript's logic:
+#   1. Capture #tadf=… fragment if present and persist to localStorage
+#      (24h TTL) so it survives navigation between teatmik.ee/search and
+#      .../personlegal/<reg_code> pages.
+#   2. Resolve token from fragment (preferred) → localStorage (fallback).
+#   3. On EHR /buildings/<code> or /objects/<code>: fetch JSON via the
+#      user's authed session, POST to TADF.
+#   4. On Teatmik /personlegal/<code>[-slug]: scrape DOM, POST to TADF.
+#   5. On Teatmik /search?…: show a "now click a company" hint.
+#   6. Otherwise: explain we're on the wrong page.
+_BOOKMARKLET_SRC = (
+    "javascript:(async()=>{"
+    "const TADF='https://tadf-audit.h2oatlas.ee',LS='tadf_connector_token',TTL=86400000;"
+    # Token plumbing
+    "const fromHash=()=>{const h=(location.hash||'').replace(/^#/,'');"
+    "for(const p of h.split('&')){const[k,v]=p.split('=');"
+    "if(k==='tadf'&&v){const t=decodeURIComponent(v),c=t.split(':');"
+    "if(c.length===3)return{auditId:parseInt(c[0],10),token:t};}}return null;};"
+    "const fromLS=()=>{try{const r=localStorage.getItem(LS);if(!r)return null;"
+    "const d=JSON.parse(r);if(!d.savedAt||Date.now()-d.savedAt>TTL){"
+    "localStorage.removeItem(LS);return null;}return{auditId:d.auditId,token:d.token};}"
+    "catch(e){return null;}};"
+    "const save=(c)=>{try{localStorage.setItem(LS,JSON.stringify({...c,savedAt:Date.now()}));}"
+    "catch(e){}};"
+    "const fh=fromHash();if(fh)save(fh);"
+    "const ctx=fh||fromLS();"
+    # Decide what to do based on URL
+    "let payload=null,path=null;"
+    "if(location.hostname.includes('ehr.ee')){"
+    "const m=location.pathname.match(/(?:buildings|objects)\\/(\\d+)/);"
+    "if(!m){alert('TADF: открой страницу здания на EHR (например …/buildings/102032773)');return;}"
+    "if(!ctx){alert('TADF: токен не найден. Открой ссылку из TADF (кнопка \\\"Открыть в EHR\\\")');return;}"
+    "const code=m[1];"
+    "try{const r=await fetch('/api/building/v3/'+code,{credentials:'include'});"
+    "payload=r.ok?await r.json():{ehr_code:code,_error:r.status};}"
+    "catch(e){payload={ehr_code:code,_error:String(e)};}"
+    "payload.ehr_code=code;path='/api/import-ehr/';}"
+    "else if(location.hostname.includes('teatmik.ee')){"
+    "const m=location.pathname.match(/personlegal\\/(\\d+)/);"
+    "if(!m){"
+    "if(location.pathname.includes('/search')){"
+    "if(!ctx){alert('TADF: токен не найден — открой Teatmik из TADF.');return;}"
+    "alert('🔎 TADF готов. Кликни на нужную компанию в результатах поиска — '+"
+    "'затем снова нажми на закладку TADF на странице компании.');return;}"
+    "alert('TADF: это не карточка компании. Должно быть www.teatmik.ee/et/personlegal/...');return;}"
+    "if(!ctx){alert('TADF: токен не найден. Открой ссылку из TADF (кнопка \\\"Найти в Teatmik\\\")');return;}"
+    "const code=m[1];"
+    "const name=document.querySelector('h1,h2,.company-name')?.textContent?.trim();"
+    "let addr=null,status=null;"
+    "document.querySelectorAll('dt,th,.label,label').forEach(el=>{"
+    "const t=(el.textContent||'').toLowerCase(),s=el.nextElementSibling;if(!s)return;"
+    "if((t.includes('aadress')||t.includes('адрес'))&&!addr)addr=s.textContent.trim();"
+    "if((t.includes('staatus')||t.includes('статус'))&&!status)status=s.textContent.trim();});"
+    "payload={reg_code:code,name,address:addr,status};path='/api/import-teatmik/';}"
+    "else if(location.hostname.includes('tadf-audit')){"
+    "alert('💡 Эту закладку нужно нажимать НА странице EHR.ee или Teatmik.ee, '+"
+    "'а не на TADF. Сначала открой аудит, кликни \\\"🔎 Открыть в EHR\\\" или '+"
+    "'\\\"🔎 Найти в Teatmik\\\" — оно откроет нужный сайт в новой вкладке. '+"
+    "'ТАМ нажми на закладку.');return;}"
+    "else{alert('TADF: эта страница не EHR.ee и не Teatmik.ee. '+"
+    "'Закладка работает только на этих сайтах.');return;}"
+    # POST
+    "try{const r=await fetch(TADF+path+ctx.auditId,{method:'POST',"
+    "headers:{'Content-Type':'application/json','Authorization':'Bearer '+ctx.token,"
+    "'X-Source-URL':location.href},body:JSON.stringify(payload),mode:'cors'});"
+    "if(r.ok)alert('✅ TADF: данные отправлены в аудит #'+ctx.auditId+'. Вернись во вкладку TADF.');"
+    "else if(r.status===401)alert('❌ TADF: токен истёк — открой страницу из TADF заново.');"
+    "else alert('❌ TADF: '+r.status+' '+(await r.text()).slice(0,200));}"
+    "catch(e){alert('❌ TADF недоступен: '+e);}"
+    "})();"
+)
 
 st.markdown(
     """
@@ -134,21 +203,44 @@ st.markdown(
 
 ### Как пользоваться
 
+#### Простой случай: уникальный поиск (одна компания / здание)
 1. На странице «🏠 Здание» в TADF: кликните **«🔎 Открыть в EHR»** или
-   **«🔎 Открыть в Teatmik»** — TADF откроет нужный сайт в новой вкладке
-   с зашитым токеном.
+   **«🔎 Найти в Teatmik»** — TADF откроет нужный сайт в новой вкладке
+   с зашитым токеном (`#tadf=…` в URL).
 2. На EHR: войдите через Smart-ID. На Teatmik: решите CAPTCHA.
-   *(оба требования одноразовые — Keycloak помнит вас ~30 дней,
-   Cloudflare — ~30 минут)*
+   - Если результат поиска **один** — Teatmik автоматически перенаправит
+     вас на карточку компании (`/personlegal/<reg_code>`). Фрагмент
+     с токеном переживёт редирект.
 3. **Кликните по закладке** «📥 TADF Connector».
 4. Появится `alert('✅ TADF: данные отправлены...')` — вернитесь во
    вкладку TADF. Данные уже в аудите как превью «принять / отклонить».
+
+#### Если результатов поиска несколько (Teatmik)
+1. Кликаете «🔎 Найти в Teatmik» в TADF → открывается страница поиска.
+2. *(опционально)* Кликаете закладку прямо на странице поиска —
+   получите подсказку «выбери компанию в результатах». Это ещё и
+   сохраняет токен в localStorage браузера, чтобы он пережил клик.
+3. Кликаете на нужную компанию в результатах → открывается её карточка.
+   - Если шаг 2 вы пропустили — закладка тоже сработает: на странице
+     поиска при первой загрузке (с `#tadf=…` в URL) токен сохраняется
+     автоматически и достаётся из localStorage потом.
+4. Кликаете закладку на карточке → данные уходят в TADF.
+
+### Что происходит при потере токена
+
+- Закладка покажет `alert` «токен не найден — открой страницу из TADF».
+  Просто вернитесь во вкладку TADF, кликните «Открыть в …» снова —
+  откроется новая вкладка со свежим токеном.
+- Токен живёт **24 часа**; через сутки автоматически перестаёт работать.
 
 ### Ограничения
 - Закладка не запоминается, если вы перетащили её в Incognito-окно.
 - Браузеры на iOS (Safari) поддерживают bookmarklets ограниченно —
   работает, но drag-and-drop сложнее (нужно вручную создать закладку
   и вставить JS-код в URL-поле).
+- Если localStorage отключён в настройках браузера, переживание
+  фрагмента между поиском → карточкой не работает — придётся открывать
+  ссылку из TADF заново.
 """
 )
 
