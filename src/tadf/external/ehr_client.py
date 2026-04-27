@@ -146,21 +146,27 @@ def _search_hit_from_dict(d: dict[str, Any]) -> EhrSearchHit:
 # ---------------------------------------------------------------------------
 
 
-def lookup_ehr(ehr_code: str) -> dict[str, Any] | None:
+def lookup_ehr(ehr_code: str, *, force_refresh: bool = False) -> dict[str, Any] | None:
     """Return a Building-shaped dict for the given EHR code.
+
+    `force_refresh=True` bypasses the local 30-day cache and re-hits
+    the live EHR API. Useful when the auditor knows the building was
+    updated in EHR (rare — energy certs, fire-class changes, address
+    updates) and wants the freshest data.
 
     Returns None if the building is not found, the API errors out, or
     the response shape is unexpected. The caller should treat None as
-    "lookup failed — fall back to manual entry / browser flow".
+    "lookup failed — fall back to manual entry".
     """
     code = (ehr_code or "").strip()
     if not code:
         return None
 
     cache_k = cache_key("ehr-lookup", code)
-    cached = cache_get("ehr", cache_k, ttl_days=_TTL_DAYS)
-    if cached is not None:
-        return cached["fields"]
+    if not force_refresh:
+        cached = cache_get("ehr", cache_k, ttl_days=_TTL_DAYS)
+        if cached is not None:
+            return cached["fields"]
 
     url = f"{_BASE}/api/building/v3/buildingData"
     try:

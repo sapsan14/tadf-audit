@@ -57,7 +57,18 @@ if _PENDING_KEY in st.session_state:
     for field, value in pending.items():
         if hasattr(b, field):
             setattr(b, field, value)
-        st.session_state.pop(k(field), None)
+        # Bulletproof reseed of the widget state. We're at the very top
+        # of the script — no widgets instantiated yet — so writing the
+        # widget's session_state key is allowed (Streamlit only forbids
+        # post-instantiation writes). Pop'ing alone has been observed to
+        # leave number_input stuck on the old display value; setting the
+        # session_state value directly forces the widget to render the
+        # new value on this run.
+        widget_key = k(field)
+        if value is None:
+            st.session_state.pop(widget_key, None)
+        else:
+            st.session_state[widget_key] = value
     audit.building = b
     set_current(audit)
 
@@ -273,7 +284,7 @@ with col2:
 # doc extractor so we never write to widgets after they've rendered.
 _EHR_RESULT_KEY = f"_ehr_result_{scope}"
 
-lc1, lc2, _ = st.columns([2, 2, 4])
+lc1, lc2, lc3, _ = st.columns([3, 2, 2, 3])
 ehr_pull = lc1.button(
     "🔎 Подгрузить из EHR",
     type="primary",
@@ -282,24 +293,43 @@ ehr_pull = lc1.button(
     use_container_width=True,
     help=(
         "Идёт прямо на livekluster.ehr.ee/api — без логина, без браузера. "
-        "Возвращает адрес, кадастр, габариты, год постройки, назначение."
+        "Кешируется на 30 дней; кнопка ниже принудительно обновляет."
         if (b.ehr_code or "").strip()
         else "Введите EHR-код выше, чтобы включить."
     ),
 )
+ehr_refresh = lc2.button(
+    "🔄 Свежие из EHR",
+    disabled=not (b.ehr_code or "").strip(),
+    key=f"ehr_refresh_{scope}",
+    use_container_width=True,
+    help=(
+        "Бьёт мимо локального кеша, хочет актуальные данные с live-сервера. "
+        "Используй, если знаешь, что в EHR что-то изменилось (новый "
+        "энергомаркер, обновление адреса, etc)."
+    ),
+)
 if b.kataster_no:
-    lc2.link_button(
-        "🗺️ Maa-amet (по кадастру)",
-        f"https://geoportaal.maaamet.ee/est/Kaardirakendused/Kinnistu-otsing-p82.html?nupp=&otsing={b.kataster_no}",
+    # X-GIS Maa-info opens the kataster directly on the map. The geoportaal
+    # Kinnistu-otsing form variant requires the user to click "Otsi" first,
+    # which is annoying; this URL skips that step.
+    lc3.link_button(
+        "🗺️ Maa-amet",
+        f"https://xgis.maaamet.ee/xgis2/page/app/maainfo?ku={b.kataster_no}",
         use_container_width=True,
+        help="Открывает кадастр на интерактивной карте Maa-amet.",
     )
 
-if ehr_pull:
+if ehr_pull or ehr_refresh:
     with st.status("Тяну из EHR (livekluster.ehr.ee)…", expanded=True) as status:
-        result = lookup_ehr(b.ehr_code)
+        result = lookup_ehr(b.ehr_code, force_refresh=ehr_refresh)
         if result:
             st.session_state[_EHR_RESULT_KEY] = result
-            status.update(label="Готово ✅", state="complete", expanded=False)
+            status.update(
+                label="Готово ✅" + (" (свежие, без кеша)" if ehr_refresh else ""),
+                state="complete",
+                expanded=False,
+            )
         else:
             status.update(label="Не нашёл такого здания в EHR ❌", state="error")
     st.rerun()
