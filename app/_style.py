@@ -55,46 +55,39 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
 }}
 
 /* ---- Sidebar layout ----
-   Force the inner container (stSidebarContent) to be a full-height flex
-   column so the user-content area can grow to fill remaining vertical
-   space — that's what lets the footer's margin-top:auto reach the
-   viewport bottom. */
-section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100% !important;
-    min-height: 100vh !important;
+   Streamlit's defaults (verified by reading the static bundle):
+     - stSidebarContent (Es)        position:relative; height:100%; overflow:auto
+     - stSidebarHeader  (Os)        display:flex; justify-content:space-between;
+                                    height:spacing.headerHeight   (≈3rem — clips a tall logo)
+     - stSidebarUserContent (Ts)    plain block, no flex
+   We need a taller header so the 110px logo isn't clipped, the logo
+   centered (overriding space-between), and the footer pinned to the
+   bottom of the sidebar. Flex auto-margins kept failing because Streamlit
+   wraps each st.markdown in extra divs that don't propagate auto-margin,
+   so we use position:absolute against the sidebar itself instead. */
+
+/* Make the sidebar a positioned ancestor so an absolute footer pins
+   to its bottom, regardless of internal wrappers. */
+section[data-testid="stSidebar"] {{
+    position: relative !important;
 }}
 
-/* User-content area expands and lays out its children as a flex column. */
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    padding-top: 1rem !important;
-}}
-
-/* Breathing room between the logo+nav block and the user content
-   (the usage block sat too close to "Правовая база"). */
-section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
-    margin-bottom: 1rem !important;
-}}
-
-/* ---- Logo: fixed-square, flex-centered ----
-   Streamlit's testid is `stSidebarLogo` (NOT `stLogo`). The actual <img>
-   is an emotion-styled component (`Ms`) whose CSS forces
-   `objectPosition: left` — that's why the SVG appeared left-anchored
-   in a wider IMG box. We override BOTH the IMG size (force a square)
-   and the object-position (center) so the SVG sits centered. The
-   `class="stLogo"` selector is redundant with [data-testid] but adds
-   specificity that beats emotion's atomic class. */
+/* ---- Logo header: taller, centered, allow the SVG full height ---- */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
-    padding: 1.5rem 0.5rem 1rem 0.5rem !important;
+    height: auto !important;
+    min-height: 140px !important;
+    padding: 1.25rem 0.5rem 0.75rem 0.5rem !important;
+    margin-bottom: 0.5rem !important;
 }}
+
+/* ---- Logo: 110×110, centered ----
+   Streamlit's testid is `stSidebarLogo`. The <img> emotion style sets
+   `object-position: left` and a height keyed to theme.sizes.largeLogoHeight,
+   with no width — so the IMG box could expand wider than its content and
+   the SVG stuck to the left. Lock both dimensions and center it. */
 section[data-testid="stSidebar"] [data-testid="stSidebarLogo"],
 section[data-testid="stSidebar"] img.stLogo,
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
@@ -111,30 +104,43 @@ section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
     margin: 0 auto !important;
 }}
 
-/* ---- Footer pinned at the very bottom of the sidebar ---- */
+/* Tighten the gap between the nav and the usage block below it. */
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
+    margin-bottom: 0.5rem !important;
+}}
+
+/* User content gets bottom padding so its content doesn't hide under the
+   absolutely-positioned footer below it. */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+    padding-top: 0.5rem !important;
+    padding-bottom: 130px !important;
+}}
+
+/* ---- Footer: pinned to the bottom of the sidebar via position:absolute ----
+   Wrapped through stMarkdown (the immediate child of stSidebarUserContent)
+   — promote that wrapper to absolute against the sidebar. */
 .tadf-sidebar-footer {{
-    padding: 0.75rem 0.5rem 0.5rem 0.5rem;
+    padding: 0.75rem 0.5rem 0.75rem 0.5rem;
     border-top: 1px solid rgba(128, 128, 128, 0.2);
     font-size: 0.72rem;
     color: rgba(128, 128, 128, 0.85);
     text-align: center;
     line-height: 1.5;
+    background: inherit;
 }}
 .tadf-sidebar-footer a {{
     color: inherit;
     text-decoration: none;
     border-bottom: 1px dotted rgba(128, 128, 128, 0.5);
 }}
-/* Pin the footer to the very bottom of the sidebar:
-   - order: 999 forces its flex item to render visually last regardless of
-     where in the DOM it was inserted (the footer is rendered *before* the
-     auth gate so it shows on the login screen, but it must still sit
-     under the post-auth user/logout block).
-   - margin-top: auto consumes any leftover vertical space above it.
-   :has() is widely supported (Chrome 105+, Safari 15.4+, Firefox 121+). */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stMarkdown"]:has(.tadf-sidebar-footer),
 section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.tadf-sidebar-footer) {{
-    order: 999 !important;
-    margin-top: auto !important;
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    z-index: 5 !important;
 }}
 </style>
 """,
