@@ -236,23 +236,29 @@ def _apply_to_client(field: str, value: object) -> None:
     setattr(audit.client, field, value)
 
 
+# Pass the model's current name (NOT the widget-state key). Reading the
+# model survives the `scope` flip from "new" → audit.id that happens on
+# the first ensure_draft_saved — under "new" scope the typed name lives
+# in `a_new_*_name`, but on the next render the widget key becomes
+# `a_<id>_*_name` (still empty), so a widget-state lookup would bail and
+# autofill would never fire.
 autofill_from_picker(
     slot=f"composer_{scope}",
-    name_widget_key=k("composer_name"),
+    picked_name=audit.composer.full_name if audit.composer else None,
     field_to_widget=_COMPOSER_AUTOFILL,
     fetch=latest_auditor_by_name,
     apply_to_model=_apply_to_composer,
 )
 autofill_from_picker(
     slot=f"reviewer_{scope}",
-    name_widget_key=k("reviewer_name"),
+    picked_name=audit.reviewer.full_name if audit.reviewer else None,
     field_to_widget=_REVIEWER_AUTOFILL,
     fetch=latest_auditor_by_name,
     apply_to_model=_apply_to_reviewer,
 )
 autofill_from_picker(
     slot=f"client_{scope}",
-    name_widget_key=k("client_name"),
+    picked_name=audit.client.name if audit.client else None,
     field_to_widget=_CLIENT_AUTOFILL,
     fetch=latest_client_by_name,
     apply_to_model=_apply_to_client,
