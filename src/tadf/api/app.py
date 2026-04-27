@@ -56,7 +56,10 @@ app.add_middleware(
     allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=False,  # tokens carry the auth — no cookies
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    # Bookmarklet sends a custom `X-Source-URL` header; the userscript adds
+    # the same. Wildcard is safe here because allow_credentials=False.
+    allow_headers=["*"],
+    expose_headers=["*"],
     max_age=3600,
 )
 
