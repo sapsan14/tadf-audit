@@ -458,29 +458,25 @@ ehr_refresh = lc2.button(
         "энергомаркер, обновление адреса, etc)."
     ),
 )
-_maa_url = maaamet_kataster_url(b.kataster_no)
-if _maa_url:
-    # `kataster.ee/?nr=<katastritunnus>` — официальный портал MaRu
-    # (Maa- ja Ruumiamet), принимает query-string и реально открывает
-    # карточку участка. Старый `xgis2/page/app/maainfo?KAT_TUNNUS=…`
-    # SPA-обёртку грузил, но к участку не переходил.
-    lc3.link_button(
-        "🗺️ Kataster.ee",
-        _maa_url,
-        use_container_width=True,
-        help=(
-            "Открывает официальный портал MaRu kataster.ee на карточке "
-            "указанного кадастра."
-        ),
+# Kataster.ee — link button is ALWAYS active. With katastritunnus filled
+# we deep-link to the parcel card (`ky.kataster.ee/ky/<tunnus>`); without
+# it we fall back to the «Kiirpäring» homepage so the auditor can still
+# search by address/cadastre manually in the SPA's own search field.
+_maa_url = maaamet_kataster_url(b.kataster_no) or "https://ky.kataster.ee/"
+_maa_help = (
+    "Открывает карточку участка по кадастру в Maa- ja Ruumiamet «Kiirpäring»."
+    if b.kataster_no
+    else (
+        "Кадастр не задан — откроется главная Kiirpäring katastrist, "
+        "где можно искать по адресу или кадастру вручную."
     )
-else:
-    lc2.button(
-        "🗺️ Kataster.ee (по кадастру)",
-        disabled=True,
-        key=f"maaamet_disabled_{scope}",
-        help="Введите кадастровый номер слева — ссылка на Kataster.ee активируется.",
-        use_container_width=True,
-    )
+)
+lc3.link_button(
+    "🗺️ Kataster.ee",
+    _maa_url,
+    use_container_width=True,
+    help=_maa_help,
+)
 
 if ehr_pull or ehr_refresh:
     # Resolve which key to look up by. Priority:
