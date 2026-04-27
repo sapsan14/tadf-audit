@@ -48,9 +48,20 @@ if uploaded:
         index=ALL_SECTION_KEYS.index("16") if "16" in ALL_SECTION_KEYS else 0,
     )
     if st.button(f"Сохранить {len(uploaded)} фото", type="primary"):
-        for f in uploaded:
+        existing = {p.sha256 for p in audit.photos if p.sha256}
+        progress = st.progress(0.0, text="Подготовка…")
+        new_count = 0
+        skipped = 0
+        for idx, f in enumerate(uploaded, start=1):
             data = f.read()
             sha = hashlib.sha256(data).hexdigest()[:16]
+            progress.progress(
+                idx / len(uploaded),
+                text=f"{idx}/{len(uploaded)}: {f.name}",
+            )
+            if sha in existing:
+                skipped += 1
+                continue
             ext = Path(f.name).suffix
             target = photos_dir / f"{sha}{ext}"
             target.write_bytes(data)
@@ -62,8 +73,16 @@ if uploaded:
                     caption_auditor=f.name,
                 )
             )
+            existing.add(sha)
+            new_count += 1
+        progress.empty()
         set_current(audit)
-        st.success(f"Сохранено {len(uploaded)} фото")
+        if skipped:
+            st.success(
+                f"Сохранено {new_count} фото · пропущено {skipped} дубликат(а/ов)"
+            )
+        else:
+            st.success(f"Сохранено {new_count} фото")
         st.rerun()
 
 st.subheader(f"Загруженные фото ({len(audit.photos)})")

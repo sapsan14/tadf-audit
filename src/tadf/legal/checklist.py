@@ -185,3 +185,41 @@ def check(audit: Audit) -> list[CheckResult]:
 
 def passes(audit: Audit) -> bool:
     return len(check(audit)) == 0
+
+
+def soft_warnings(audit: Audit) -> list[CheckResult]:
+    """Quality warnings — things that don't block render but would weaken
+    the report at ehitisregister.ee review.
+
+    Currently:
+      - non-info-severity findings outside sections 11/14 with no legal_ref
+        — a "major non-conformance" without a cited norm is hard for an EHR
+        reviewer to verify.
+    """
+    out: list[CheckResult] = []
+    for idx, f in enumerate(audit.findings):
+        is_locked = f.section_ref.split(".", 1)[0] in {"11", "14"}
+        if is_locked:
+            continue
+        if f.severity == "info":
+            continue
+        if f.legal_ref_codes:
+            continue
+        sev = f.severity
+        out.append(
+            CheckResult(
+                field=f"findings[{idx}].legal_ref_codes",
+                section_hint=f"Наблюдения → {f.section_ref}",
+                why_et=(
+                    f"Leid #{idx + 1} jaotises {f.section_ref} on raskusastmega "
+                    f"'{sev}', kuid sellel pole ühtki õigusviidet — "
+                    "EHR retsensent ootab viidatud normi."
+                ),
+                why_ru=(
+                    f"Наблюдение #{idx + 1} в разделе {f.section_ref} имеет "
+                    f"тяжесть «{sev}», но без ссылок на закон — рецензент "
+                    "EHR ждёт цитату нормы."
+                ),
+            )
+        )
+    return out

@@ -114,13 +114,25 @@ NEW_SEV_KEY = f"new_finding_severity_{scope}"
 DRAFT_RESULT_KEY = f"_draft_result_{scope}"
 
 
+# Cross-audit "last used" defaults. After «➕ Добавить наблюдение» the most
+# recent section/severity get stashed here so the next new-finding form on
+# this OR a subsequent audit starts from where the auditor left off (matches
+# the natural 6.1 → 6.2 → 6.3 progression of a structural walkthrough).
+_LAST_SECTION_KEY = "_last_used_finding_section"
+_LAST_SEVERITY_KEY = "_last_used_finding_severity"
+
+
 def _ensure_new_finding_state() -> None:
     if NEW_SECTION_KEY not in st.session_state:
-        st.session_state[NEW_SECTION_KEY] = SECTION_KEYS[0]
+        st.session_state[NEW_SECTION_KEY] = st.session_state.get(
+            _LAST_SECTION_KEY, SECTION_KEYS[0]
+        )
     if NEW_OBS_KEY not in st.session_state:
         st.session_state[NEW_OBS_KEY] = ""
     if NEW_SEV_KEY not in st.session_state:
-        st.session_state[NEW_SEV_KEY] = "info"
+        st.session_state[NEW_SEV_KEY] = st.session_state.get(
+            _LAST_SEVERITY_KEY, "info"
+        )
 
 
 _ensure_new_finding_state()
@@ -265,6 +277,9 @@ if add_col.button("➕ Добавить наблюдение", type="primary", k
                 legal_ref_codes=new_legal_codes,
             )
         )
+        # Remember last-used section/severity for the next new-finding form.
+        st.session_state[_LAST_SECTION_KEY] = new_section
+        st.session_state[_LAST_SEVERITY_KEY] = new_severity
         # Clear new-finding state so the form is empty for the next entry.
         st.session_state[NEW_OBS_KEY] = ""
         st.session_state[f"new_finding_rec_{scope}"] = ""
@@ -282,6 +297,37 @@ if not audit.findings:
         "Пока нет наблюдений. Добавьте хотя бы одну в каждый из обязательных "
         "разделов: 11 (Kokkuvõte) и 14 (Lõpphinnang)."
     )
+else:
+    # ---- At-a-glance completeness table ----
+    # Lets the auditor see which findings still need a recommendation or
+    # legal-ref without expanding every panel.
+    has_11 = any(ff.section_ref.startswith("11") for ff in audit.findings)
+    has_14 = any(ff.section_ref.startswith("14") for ff in audit.findings)
+    if not (has_11 and has_14):
+        miss = []
+        if not has_11:
+            miss.append("11 (Kokkuvõte)")
+        if not has_14:
+            miss.append("14 (Lõpphinnang)")
+        st.warning(f"⚠️ Не хватает наблюдений в разделах: {', '.join(miss)}")
+
+    rows = []
+    for idx, ff in enumerate(audit.findings):
+        is_locked_section = ff.section_ref.split(".")[0] in {"11", "14"}
+        # legal_ref is only required for non-info severity AND for non-auditor-only
+        # sections; sections 11/14 don't need formal refs in the body.
+        needs_ref = ff.severity != "info" and not is_locked_section
+        has_ref = bool(ff.legal_ref_codes)
+        has_rec = bool((ff.recommendation or "").strip())
+        rows.append({
+            "#": idx + 1,
+            "Раздел": ff.section_ref,
+            "Тяжесть": SEVERITY_LABELS.get(ff.severity, ff.severity),
+            "Закон": "✅" if has_ref else ("⚠️" if needs_ref else "—"),
+            "Рек.": "✅" if has_rec else "—",
+            "Текст": (ff.observation_raw or "")[:60] + ("…" if len(ff.observation_raw or "") > 60 else ""),
+        })
+    st.dataframe(rows, hide_index=True, use_container_width=True)
 
 if "_pending_delete" not in st.session_state:
     st.session_state._pending_delete = None
@@ -366,6 +412,19 @@ for i, f in enumerate(audit.findings):
             key=f"refs_{scope}_{i}",
         )
 
+        # ---- Auto-persist edits to the in-memory Finding on every rerun.
+        # This prevents the auditor from losing typed-but-unsaved text when
+        # they navigate to another page; the explicit «💾 Сохранить» button
+        # below now acts as a checkpoint/confirmation rather than the only
+        # gate to memory. (DB write still requires «Сохранить черновик» on
+        # the «Готовый отчёт» page.)
+        if edited_observation.strip():
+            f.observation_raw = edited_observation.strip()
+        f.recommendation = edited_recommendation.strip() or None
+        f.section_ref = edited_section
+        f.severity = edited_severity
+        f.legal_ref_codes = edited_legal_codes
+
         # ---- Action row: Save + AI buttons + Delete, all on ONE line ----
         polish_disabled = is_locked(f.section_ref)
         in_delete = st.session_state._pending_delete == i
@@ -427,13 +486,11 @@ for i, f in enumerate(audit.findings):
                 if not edited_observation.strip():
                     st.error("Наблюдение не может быть пустым.")
                 else:
-                    f.section_ref = edited_section
-                    f.severity = edited_severity
-                    f.observation_raw = edited_observation.strip()
-                    f.recommendation = edited_recommendation.strip() or None
-                    f.legal_ref_codes = edited_legal_codes
+                    # Auto-persist already wrote the edits above; this button
+                    # remains as an explicit checkpoint that flushes the
+                    # in-memory model and confirms to the auditor.
                     set_current(audit)
-                    st.success("Изменения сохранены")
+                    st.success("Изменения зафиксированы")
                     st.rerun()
 
             if del_clicked:

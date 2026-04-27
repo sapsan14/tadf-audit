@@ -268,8 +268,23 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
                 for field, cur, proposed in rows:
                     rc1, rc2, rc3, rc4 = st.columns([2, 3, 3, 1])
                     rc1.write(f"`{field}`")
-                    rc2.write("(пусто)" if cur in (None, "") else str(cur))
-                    rc3.write(str(proposed))
+                    cur_display = "(пусто)" if cur in (None, "") else str(cur)
+                    rc2.write(cur_display)
+                    # Highlight the «Извлечено» cell so the auditor sees at a
+                    # glance which fields actually differ from what they
+                    # already had. Yellow = filling an empty slot, green =
+                    # overwriting a previous value.
+                    if cur in (None, ""):
+                        bg = "#fef9c3"  # yellow-100
+                        icon = "🟡"
+                    else:
+                        bg = "#dcfce7"  # green-100
+                        icon = "🟢"
+                    rc3.markdown(
+                        f"<div style='background:{bg};padding:2px 8px;"
+                        f"border-radius:4px'>{icon} {str(proposed)}</div>",
+                        unsafe_allow_html=True,
+                    )
                     accept[field] = rc4.checkbox(
                         "",
                         value=True,

@@ -64,6 +64,51 @@ def delete_audit_by_id(audit_id: int) -> None:
         delete_audit(s, audit_id)
 
 
+def clone_as_new_draft(audit_id: int) -> None:
+    """Load an existing audit and use it as a template for a new draft.
+
+    Carries forward the parts that repeat across audits in the same area
+    (auditor block, audit type/subtype, methodology version) and resets
+    everything that's per-building (address/EHR/kataster, findings, photos,
+    visit date). The client is also reset since the next audit usually has
+    a different owner.
+    """
+    with session_scope() as s:
+        src = load_audit(s, audit_id)
+    src.id = None
+    src.created_at = None
+    src.updated_at = None
+    src.status = "draft"
+    src.findings = []
+    src.photos = []
+    src.visit_date = date.today()
+    # Building: reuse use_purpose / fire_class style metadata defaults but
+    # null out anything that uniquely identifies the previous object.
+    b = src.building
+    b.id = None
+    b.address = ""
+    b.ehr_code = None
+    b.kataster_no = None
+    b.designer = None
+    b.builder = None
+    b.construction_year = None
+    b.last_renovation_year = None
+    b.footprint_m2 = None
+    b.height_m = None
+    b.volume_m3 = None
+    b.site_area_m2 = None
+    b.substitute_docs_note = None
+    # Client: a different audit usually means a different owner.
+    src.client = Client(name="")
+    # Increment seq_no within the current year so the cloned draft doesn't
+    # collide with the source's audit number.
+    src.seq_no = src.seq_no + 1
+    src.year = date.today().year
+
+    st.session_state["audit"] = src
+    st.session_state.pop("loaded_id", None)
+
+
 def _audit_has_user_data(audit: Audit) -> bool:
     """True if the auditor has typed something meaningful into the form
     (any non-default field). Used by `ensure_draft_saved` so we only
