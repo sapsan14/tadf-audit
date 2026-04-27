@@ -10,7 +10,13 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import ensure_draft_saved, get_current, set_current  # noqa: E402
-from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
+from app._widgets import (  # noqa: E402
+    address_picker,
+    company_picker,
+    flush_improve_pending,
+    improve_button_for,
+)
+from tadf import feature_flags  # noqa: E402
 from tadf.api.imports import (  # noqa: E402
     list_pending,
     map_teatmik,
@@ -166,7 +172,8 @@ def _render_pending_teatmik_imports() -> None:
                 st.rerun(scope="app")
 
 
-_render_pending_teatmik_imports()
+if feature_flags.teatmik_enabled():
+    _render_pending_teatmik_imports()
 
 
 # ---------------------------------------------------------------------------
@@ -275,15 +282,47 @@ with st.expander("📄 Импорт из проекта (тезисы из selet
                         st.text(raw[:5000] + ("…" if len(raw) > 5000 else ""))
 
 
+def _apply_inads_hit(hit) -> None:  # type: AddressHit
+    update = {"address": hit.address}
+    if hit.kataster and not (b.kataster_no or "").strip():
+        update["kataster_no"] = hit.kataster
+    st.session_state[_PENDING_KEY] = update
+    # Clear the picker's own state so the dropdown collapses on rerun.
+    st.session_state.pop(f"_addr_search_b_{scope}", None)
+    st.session_state.pop(f"_addr_q_b_{scope}", None)
+    st.rerun()
+
+
+address_picker(
+    key_prefix=f"b_{scope}",
+    on_select=_apply_inads_hit,
+    label="🔎 Найти адрес в Maa-amet (in-ADS)",
+)
+
 b.address = st.text_input(
     "Адрес объекта (Aadress)",
     value=b.address,
     key=k("address"),
     help=(
         "Полный почтовый адрес здания в формате «улица номер, населённый пункт, "
-        "уезд». Например: «Auga tn 8, Narva-Jõesuu linn, Ida-Viru maakond»."
+        "уезд». Например: «Auga tn 8, Narva-Jõesuu linn, Ida-Viru maakond». "
+        "Можно набрать вручную или выбрать через поиск выше — тогда подтянется "
+        "и кадастровый номер, если он пустой."
     ),
 )
+
+_client_addr = (audit.client.address or "").strip() if audit.client else ""
+_b_addr_now = (b.address or "").strip()
+if _client_addr and not _b_addr_now and st.button(
+    f"⤓ Использовать адрес заказчика: {_client_addr}",
+    key=f"copy_client_addr_{scope}",
+    help=(
+        "Частый случай — физлицо аудитит свой собственный дом. "
+        "Заполняет адрес объекта значением, уже введённым в карточке заказчика."
+    ),
+):
+    st.session_state[_PENDING_KEY] = {"address": _client_addr}
+    st.rerun()
 
 col1, col2 = st.columns(2)
 with col1:
@@ -605,50 +644,87 @@ st.caption(
     "Ссылка «🔎 Teatmik» открывает реестр предприятий в новой вкладке "
     "(там можно проверить рег-код, адрес и статус)."
 )
+def _apply_company_to_slot(slot: str):
+    def _cb(hit) -> None:  # type: CompanyHit
+        st.session_state[_PENDING_KEY] = {slot: hit.name}
+        st.session_state.pop(f"_co_search_{slot}_{scope}", None)
+        st.session_state.pop(f"_co_q_{slot}_{scope}", None)
+        st.rerun()
+    return _cb
+
+
 col1, col2 = st.columns(2)
 with col1:
+    company_picker(
+        key_prefix=f"designer_{scope}",
+        on_select=_apply_company_to_slot("designer"),
+        label="🔎 Найти проектировщика в Ariregister",
+    )
     b.designer = st.text_input(
         "Designer (projekteerija)",
         value=b.designer or "",
         key=k("designer"),
         help=(
             "Кто проектировал здание (физ. лицо или фирма). "
-            "Берётся из ehitusprojekti документации, если есть."
+            "Можно набрать вручную или выбрать через поиск выше."
         ),
     ) or None
-    _designer_link = teatmik_company_url(b.designer) if b.designer else None
-    if _designer_link:
-        if audit.id is not None:
-            _designer_link = _with_token_fragment(_designer_link, audit.id, target="designer")
-        st.link_button("🔎 Teatmik (designer)", _designer_link, use_container_width=True)
-    else:
-        st.button(
-            "🔎 Teatmik (designer)",
-            disabled=True,
-            key=f"teatmik_designer_disabled_{scope}",
-            help="Введите имя проектировщика выше — ссылка на Teatmik активируется.",
-            use_container_width=True,
-        )
+    if feature_flags.teatmik_enabled():
+        with st.expander("🌐 Альтернативно: Teatmik (designer)", expanded=False):
+            _designer_link = teatmik_company_url(b.designer) if b.designer else None
+            if _designer_link:
+                if audit.id is not None:
+                    _designer_link = _with_token_fragment(
+                        _designer_link, audit.id, target="designer"
+                    )
+                st.link_button(
+                    "🔎 Teatmik (designer)", _designer_link, use_container_width=True
+                )
+            else:
+                st.button(
+                    "🔎 Teatmik (designer)",
+                    disabled=True,
+                    key=f"teatmik_designer_disabled_{scope}",
+                    help=(
+                        "Введите имя проектировщика выше — "
+                        "ссылка на Teatmik активируется."
+                    ),
+                    use_container_width=True,
+                )
 with col2:
+    company_picker(
+        key_prefix=f"builder_{scope}",
+        on_select=_apply_company_to_slot("builder"),
+        label="🔎 Найти строителя в Ariregister",
+    )
     b.builder = st.text_input(
         "Builder (ehitaja)",
         value=b.builder or "",
         key=k("builder"),
-        help="Кто строил здание (генподрядчик).",
+        help=(
+            "Кто строил здание (генподрядчик). "
+            "Можно набрать вручную или выбрать через поиск выше."
+        ),
     ) or None
-    _builder_link = teatmik_company_url(b.builder) if b.builder else None
-    if _builder_link:
-        if audit.id is not None:
-            _builder_link = _with_token_fragment(_builder_link, audit.id, target="builder")
-        st.link_button("🔎 Teatmik (builder)", _builder_link, use_container_width=True)
-    else:
-        st.button(
-            "🔎 Teatmik (builder)",
-            disabled=True,
-            key=f"teatmik_builder_disabled_{scope}",
-            help="Введите имя строителя выше — ссылка на Teatmik активируется.",
-            use_container_width=True,
-        )
+    if feature_flags.teatmik_enabled():
+        with st.expander("🌐 Альтернативно: Teatmik (builder)", expanded=False):
+            _builder_link = teatmik_company_url(b.builder) if b.builder else None
+            if _builder_link:
+                if audit.id is not None:
+                    _builder_link = _with_token_fragment(
+                        _builder_link, audit.id, target="builder"
+                    )
+                st.link_button(
+                    "🔎 Teatmik (builder)", _builder_link, use_container_width=True
+                )
+            else:
+                st.button(
+                    "🔎 Teatmik (builder)",
+                    disabled=True,
+                    key=f"teatmik_builder_disabled_{scope}",
+                    help="Введите имя строителя выше — ссылка на Teatmik активируется.",
+                    use_container_width=True,
+                )
 
 if b.pre_2003:
     b.substitute_docs_note = st.text_area(
