@@ -27,6 +27,21 @@ if [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]]; then
 	printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 fi
 
+# Free disk before pulling — each release is a fresh GHCR sha-tag, so
+# old `ghcr.io/sapsan14/tadf-audit:sha-…` layers accumulate fast on a
+# small Hetzner box and eventually fill `/var/lib/docker`. Symptom of
+# the overflow: «No space left on device» during the next `uv` invocation
+# inside the container at startup.
+#
+# Safe to run unconditionally — `image prune -af` skips images that are
+# currently in use by a running container (so the live `tadf` + `caddy`
+# stay), and named volumes (`tadf-data`, `caddy-data`, `caddy-config`)
+# are never touched by any `prune` variant we issue.
+log "Pruning unused docker images + build cache to reclaim disk"
+docker image prune -af 2>&1 | tail -3 || true
+docker builder prune -af 2>&1 | tail -3 || true
+df -h /var/lib/docker 2>/dev/null | tail -1 || true
+
 log "Pulling images"
 docker compose pull
 

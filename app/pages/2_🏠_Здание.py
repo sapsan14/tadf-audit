@@ -460,22 +460,25 @@ ehr_refresh = lc2.button(
 )
 _maa_url = maaamet_kataster_url(b.kataster_no)
 if _maa_url:
-    # xgis2 maainfo accepts KAT_TUNNUS=<katastritunnus> together with
-    # ALAJAOTUS=KIRG_KATASTRIYKSUSED to zoom directly to the parcel.
-    # The earlier `?ku=…` parameter is silently dropped by the viewer
-    # so the user landed on a blank map.
+    # `kataster.ee/?nr=<katastritunnus>` — официальный портал MaRu
+    # (Maa- ja Ruumiamet), принимает query-string и реально открывает
+    # карточку участка. Старый `xgis2/page/app/maainfo?KAT_TUNNUS=…`
+    # SPA-обёртку грузил, но к участку не переходил.
     lc3.link_button(
-        "🗺️ Maa-amet",
+        "🗺️ Kataster.ee",
         _maa_url,
         use_container_width=True,
-        help="Открывает кадастр на интерактивной карте Maa-amet (xgis2 maainfo).",
+        help=(
+            "Открывает официальный портал MaRu kataster.ee на карточке "
+            "указанного кадастра."
+        ),
     )
 else:
     lc2.button(
-        "🗺️ Maa-amet (по кадастру)",
+        "🗺️ Kataster.ee (по кадастру)",
         disabled=True,
         key=f"maaamet_disabled_{scope}",
-        help="Введите кадастровый номер слева — ссылка на Maa-amet активируется.",
+        help="Введите кадастровый номер слева — ссылка на Kataster.ee активируется.",
         use_container_width=True,
     )
 
