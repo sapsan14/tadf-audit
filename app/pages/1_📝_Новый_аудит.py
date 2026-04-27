@@ -13,8 +13,10 @@ import streamlit as st  # noqa: E402
 
 from app._state import (  # noqa: E402
     all_saved_drafts,
+    clear_audit_snapshots,
     clone_as_new_draft,
     delete_audit_by_id,
+    delete_audit_snapshot,
     ensure_draft_saved,
     get_current,
     list_audit_snapshots,
@@ -164,11 +166,50 @@ with st.container(border=True):
                     with st.expander(f"🕘 История ({len(snaps)})", expanded=False):
                         st.caption(
                             "Каждая запись — снимок состояния на момент авто-сохранения. "
-                            "Нажмите «Восстановить», чтобы откатиться (можно потом откатить откат — "
-                            "сам restore тоже создаёт новую запись)."
+                            "«↩️ Восстановить» откатывает на эту версию (откат тоже сохраняется "
+                            "новой записью, так что можно вернуть как было). "
+                            "«🗑» удаляет одну версию; «🧹 Очистить всю историю» — все версии этого аудита."
                         )
+
+                        # Bulk-clear button (with two-step confirm — wipes
+                        # the history of a draft that's grown unwieldy).
+                        clr_pending = f"_snap_clear_confirm_{d.id}"
+                        if st.session_state.get(clr_pending):
+                            cc_yes, cc_no, _ = st.columns([2, 2, 4])
+                            if cc_yes.button(
+                                "✓ Подтвердить очистку",
+                                key=f"snap_clear_ok_{d.id}",
+                                type="primary",
+                                use_container_width=True,
+                            ):
+                                removed = clear_audit_snapshots(d.id)
+                                st.session_state.pop(clr_pending, None)
+                                st.success(f"Удалено версий: {removed}")
+                                st.rerun()
+                            if cc_no.button(
+                                "Отмена",
+                                key=f"snap_clear_cancel_{d.id}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.pop(clr_pending, None)
+                                st.rerun()
+                        else:
+                            cclr, _ = st.columns([3, 5])
+                            if cclr.button(
+                                "🧹 Очистить всю историю",
+                                key=f"snap_clear_btn_{d.id}",
+                                help=(
+                                    "Удалит все версии этого аудита. "
+                                    "Сам черновик останется — пропадёт только история. "
+                                    "Следующее авто-сохранение начнёт нумерацию заново с v1."
+                                ),
+                                use_container_width=True,
+                            ):
+                                st.session_state[clr_pending] = True
+                                st.rerun()
+
                         for snap_id, version_no, created_at in snaps:
-                            sc1, sc2, sc3 = st.columns([2, 4, 2])
+                            sc1, sc2, sc3, sc4 = st.columns([1, 4, 2, 1])
                             sc1.markdown(f"**v{version_no}**")
                             sc2.markdown(
                                 f"<small>{created_at.strftime('%Y-%m-%d %H:%M:%S')}</small>",
@@ -184,6 +225,19 @@ with st.container(border=True):
                                     st.rerun()
                                 else:
                                     st.error("Не удалось восстановить (повреждённый снимок)")
+                            # Per-snapshot delete — single click, no
+                            # confirm. The «↩️ Восстановить» of any
+                            # remaining version + auto-save behaviour
+                            # makes recovery cheap if it was a misclick.
+                            if sc4.button(
+                                "🗑",
+                                key=f"snap_del_{d.id}_{snap_id}",
+                                help=f"Удалить только версию v{version_no}",
+                                use_container_width=True,
+                            ):
+                                if delete_audit_snapshot(snap_id):
+                                    st.toast(f"Удалена v{version_no}", icon="🗑")
+                                st.rerun()
 
 audit = get_current()
 scope = audit.id or "new"
