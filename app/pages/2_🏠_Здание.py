@@ -9,7 +9,7 @@ sys.path.insert(0, str(_root / "src"))
 
 import streamlit as st  # noqa: E402
 
-from app._state import get_current, set_current  # noqa: E402
+from app._state import ensure_draft_saved, get_current, set_current  # noqa: E402
 from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
 from tadf.api.imports import (  # noqa: E402
     list_pending,
@@ -315,6 +315,16 @@ with col2:
         or None
     )
 
+# Auto-save the draft now that the building text fields above (address,
+# kataster, ehr_code) have rendered and committed their values to b.*.
+# As soon as the user types something, audit.id is assigned so the
+# token-fragment EHR/Teatmik features below stop saying "сохрани аудит
+# сначала" — the entire flow becomes one click. We DON'T rotate `scope`
+# here — within this render the widget keys stay "b_new_*" and the
+# typed values are preserved via the model on next render's `value=`.
+ensure_draft_saved(audit)
+
+
 # EHR direct lookup — uses the public e-ehitus API
 # (livekluster.ehr.ee/api/building/v3/buildingData?ehr_code=…) which
 # requires no auth. One click → all fields populated. The preview/diff
@@ -322,23 +332,24 @@ with col2:
 # doc extractor so we never write to widgets after they've rendered.
 _EHR_RESULT_KEY = f"_ehr_result_{scope}"
 
+# Buttons are always enabled — the click event itself triggers blur on
+# the text input above (commit-and-rerun in one go), so we validate the
+# code at click time. This way the user types EHR-code → clicks the
+# button immediately, no Tab-out-first dance.
+_ehr_code_now = (b.ehr_code or "").strip()
 lc1, lc2, lc3, _ = st.columns([3, 2, 2, 3])
 ehr_pull = lc1.button(
     "🔎 Подгрузить из EHR",
     type="primary",
-    disabled=not (b.ehr_code or "").strip(),
     key=f"ehr_pull_{scope}",
     use_container_width=True,
     help=(
         "Идёт прямо на livekluster.ehr.ee/api — без логина, без браузера. "
-        "Кешируется на 30 дней; кнопка ниже принудительно обновляет."
-        if (b.ehr_code or "").strip()
-        else "Введите EHR-код выше, чтобы включить."
+        "Кешируется на 30 дней; кнопка «🔄 Свежие из EHR» обновляет принудительно."
     ),
 )
 ehr_refresh = lc2.button(
     "🔄 Свежие из EHR",
-    disabled=not (b.ehr_code or "").strip(),
     key=f"ehr_refresh_{scope}",
     use_container_width=True,
     help=(
@@ -367,18 +378,21 @@ else:
     )
 
 if ehr_pull or ehr_refresh:
-    with st.status("Тяну из EHR (livekluster.ehr.ee)…", expanded=True) as status:
-        result = lookup_ehr(b.ehr_code, force_refresh=ehr_refresh)
-        if result:
-            st.session_state[_EHR_RESULT_KEY] = result
-            status.update(
-                label="Готово ✅" + (" (свежие, без кеша)" if ehr_refresh else ""),
-                state="complete",
-                expanded=False,
-            )
-        else:
-            status.update(label="Не нашёл такого здания в EHR ❌", state="error")
-    st.rerun()
+    if not _ehr_code_now:
+        st.warning("Сначала введите EHR-код в поле выше.")
+    else:
+        with st.status("Тяну из EHR (livekluster.ehr.ee)…", expanded=True) as status:
+            result = lookup_ehr(_ehr_code_now, force_refresh=ehr_refresh)
+            if result:
+                st.session_state[_EHR_RESULT_KEY] = result
+                status.update(
+                    label="Готово ✅" + (" (свежие, без кеша)" if ehr_refresh else ""),
+                    state="complete",
+                    expanded=False,
+                )
+            else:
+                status.update(label="Не нашёл такого здания в EHR ❌", state="error")
+        st.rerun()
 
 if _EHR_RESULT_KEY in st.session_state:
     ehr_data = st.session_state[_EHR_RESULT_KEY]
