@@ -7,7 +7,9 @@ so DON'T rename it. The sidebar nav label "TADF Ehitus" is set via
 This entry script owns three things that must run on EVERY page:
   1. layout (CSS max-width + wide mode)
   2. auth gate
-  3. sidebar (logout + Claude usage tracker)
+  3. sidebar — logo, Claude-usage tracker, and version footer all render
+     BEFORE the auth gate so they're visible on the login screen too.
+     User name + logout render after the gate.
 
 Pages then run via `nav.run()`. They no longer call `apply_consistent_layout`
 or `require_login` themselves — Streamlit treats main + active page as one
@@ -62,16 +64,8 @@ nav = st.navigation(pages, position="sidebar")
 
 
 # ---------------------------------------------------------------------------
-# Auth gate — st.stop()s if not logged in, so nav.run() below never executes
-# for unauthenticated users.
-# ---------------------------------------------------------------------------
-from app._auth import logout_button, require_login  # noqa: E402
-
-_auth = require_login()
-
-
-# ---------------------------------------------------------------------------
-# Authenticated-only setup: DB seed + sidebar widgets
+# DB init runs BEFORE the auth gate so the usage-tracker SQLite tables
+# exist when render_usage_block() reads them on the login screen.
 # ---------------------------------------------------------------------------
 from app._sidebar import render_usage_block  # noqa: E402
 from tadf.config import ROOT  # noqa: E402
@@ -95,19 +89,36 @@ def _seed_db_once() -> tuple[int, int, int]:
 _seed_db_once()
 
 
+# ---------------------------------------------------------------------------
+# Pre-auth sidebar widgets — usage tracker + version footer render on the
+# login screen too. The footer is pinned to the bottom via CSS
+# (margin-top:auto on its wrapper), regardless of insertion order.
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    render_usage_block()
+
+render_sidebar_footer()
+
+
+# ---------------------------------------------------------------------------
+# Auth gate — st.stop()s if not logged in, so nav.run() below never executes
+# for unauthenticated users.
+# ---------------------------------------------------------------------------
+from app._auth import logout_button, require_login  # noqa: E402
+
+_auth = require_login()
+
+
+# ---------------------------------------------------------------------------
+# Authenticated-only sidebar bits: user name + logout
+# ---------------------------------------------------------------------------
 with st.sidebar:
     user_display = st.session_state.get("name", "")
     if user_display:
         st.markdown(f"👤 **{user_display}**")
     logout_button(_auth, location="sidebar")
     st.markdown("---")
-    render_usage_block()
 
 
 # Run the active page (declared above)
 nav.run()
-
-# Version + copyright pinned to the bottom of the sidebar (CSS-flex pushed
-# via margin-top: auto). Rendered after nav.run() so it lands as the last
-# child of the sidebar's user-content flex column.
-render_sidebar_footer()
