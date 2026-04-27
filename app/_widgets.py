@@ -311,29 +311,39 @@ def autofill_from_picker(
     name_widget_key: str,
     field_to_widget: dict[str, str],
     fetch: Callable[[str], dict | None],
+    apply_to_model: Callable[[str, object], None] | None = None,
 ) -> bool:
     """Watch a name combobox and autofill sibling fields from the DB on pick.
 
     When the user picks a previously-entered name (e.g. «Fjodor Sokolov»
-    in Auditi koostas, «Olga Tšervjakova» in Заказчик), the rest of the
+    in Auditi koostas, «TADF Ehitus OÜ» in Заказчик), the rest of the
     record — company, reg-code, kutsetunnistus, contact details — is
-    already in the DB from past audits. Re-typing it is pure friction.
+    already in the DB. Re-typing it is pure friction.
 
     Behaviour:
       - Tracks the last-seen value of the name widget in
         `st.session_state[f"_autofill_last_{slot}"]`.
-      - On change AND when `fetch(name)` returns a record, queues every
-        non-empty mapped field via the same `_imp_pending_widget_*` slot
-        that `flush_improve_pending()` consumes at the top of the page,
-        then `st.rerun()`s. The next render seeds widgets BEFORE they
-        instantiate — Streamlit-safe.
+      - On change AND when `fetch(name)` returns a record, for every
+        non-empty mapped field:
+          1. Pop the existing widget-state slot (so a stale prior value
+             doesn't out-rank the new write — Streamlit treats a key
+             that was already set by a previous render as authoritative
+             over `value=`, which broke this flow before).
+          2. Write the new value into the widget-state slot.
+          3. (NEW, optional) Call `apply_to_model(field, value)` so the
+             page's pydantic model is updated in lockstep with the
+             session-state write. Without this, the widget's `value=`
+             argument keeps reading `audit.client.reg_code or ""`, which
+             stays None until the widget round-trips the value back —
+             and on some Streamlit versions that means the widget shows
+             empty even though session_state has the right value queued.
+      - Calls `st.rerun()` so the widgets render with the new state.
       - No rerun on second sight of the same name (loop guard).
 
-    Returns True if a rerun was issued (caller doesn't need to know —
-    Streamlit unwinds the script — but useful for tests).
+    Returns True if a rerun was issued.
 
     Must be called BEFORE the sibling-field widgets render in the same
-    script run, otherwise the queued values are flushed too late.
+    script run.
     """
     last_key = f"_autofill_last_{slot}"
     picked = (st.session_state.get(name_widget_key) or "").strip()
@@ -348,17 +358,22 @@ def autofill_from_picker(
     if record is None:
         return False
 
-    queued = False
+    changed = False
     for field, widget_key in field_to_widget.items():
         value = record.get(field)
         if not value:
             continue
-        st.session_state[f"{_PENDING_PREFIX}{widget_key}"] = value
-        queued = True
+        # Drop any prior widget state for this key so the new write wins
+        # cleanly (see docstring step 1).
+        st.session_state.pop(widget_key, None)
+        st.session_state[widget_key] = value
+        if apply_to_model is not None:
+            apply_to_model(field, value)
+        changed = True
 
-    if queued:
+    if changed:
         st.rerun()
-    return queued
+    return changed
 
 
 def flush_improve_pending() -> None:

@@ -288,6 +288,144 @@ def test_latest_auditor_returns_none_after_delete(db_engine):
 # Backfill is idempotent
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# update_directory_*
+# ---------------------------------------------------------------------------
+
+from tadf.db.repo import (  # noqa: E402
+    update_directory_auditor,
+    update_directory_builder,
+    update_directory_client,
+    update_directory_designer,
+    update_directory_use_purpose,
+)
+
+
+def test_update_directory_auditor_changes_fields_in_place(db_engine):
+    with Session(db_engine) as s:
+        upsert_directory_auditor(
+            s,
+            Auditor(
+                full_name="Anton",
+                kutsetunnistus_no="111",
+                qualification="Old",
+                company="Old Co",
+            ),
+        )
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryAuditorRow).one()
+        update_directory_auditor(
+            s,
+            row_id=row.id,
+            full_name="Anton Sokolov",
+            kutsetunnistus_no="222",
+            qualification="New",
+            company="New Co",
+            company_reg_nr="12345678",
+        )
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryAuditorRow).one()
+        assert row.full_name == "Anton Sokolov"
+        assert row.kutsetunnistus_no == "222"
+        assert row.qualification == "New"
+        assert row.company == "New Co"
+        assert row.company_reg_nr == "12345678"
+
+
+def test_update_returns_false_when_row_missing(db_engine):
+    with Session(db_engine) as s:
+        assert update_directory_auditor(s, row_id=9999, full_name="Whatever") is False
+
+
+def test_update_rejects_empty_name(db_engine):
+    with Session(db_engine) as s:
+        upsert_directory_auditor(s, Auditor(full_name="Anton"))
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryAuditorRow).one()
+        with pytest.raises(ValueError, match="не может быть пустым"):
+            update_directory_auditor(s, row_id=row.id, full_name="")
+
+
+def test_update_rejects_name_clash(db_engine):
+    with Session(db_engine) as s:
+        upsert_directory_auditor(s, Auditor(full_name="Anton"))
+        upsert_directory_auditor(s, Auditor(full_name="Boris"))
+        s.commit()
+    with Session(db_engine) as s:
+        boris = (
+            s.query(DirectoryAuditorRow)
+            .filter_by(full_name="Boris")
+            .one()
+        )
+        with pytest.raises(ValueError, match="уже занято"):
+            update_directory_auditor(s, row_id=boris.id, full_name="Anton")
+
+
+def test_update_directory_client_full_round_trip(db_engine):
+    with Session(db_engine) as s:
+        upsert_directory_client(s, Client(name="Acme", reg_code="111"))
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryClientRow).one()
+        update_directory_client(
+            s,
+            row_id=row.id,
+            name="Acme Updated",
+            reg_code="222",
+            contact_email="hello@example.com",
+            contact_phone="+372 555 0000",
+            address="Tartu mnt 84a, Tallinn",
+        )
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryClientRow).one()
+        assert row.name == "Acme Updated"
+        assert row.reg_code == "222"
+        assert row.contact_email == "hello@example.com"
+        assert row.address == "Tartu mnt 84a, Tallinn"
+
+
+def test_update_designer_and_builder(db_engine):
+    with Session(db_engine) as s:
+        upsert_directory_designer(s, "Bureau OÜ")
+        upsert_directory_builder(s, "Build OÜ")
+        s.commit()
+    with Session(db_engine) as s:
+        d = s.query(DirectoryDesignerRow).one()
+        b = s.query(DirectoryBuilderRow).one()
+        update_directory_designer(
+            s, row_id=d.id, name="Bureau Updated OÜ", reg_code="11111111"
+        )
+        update_directory_builder(
+            s, row_id=b.id, name="Build Updated OÜ", reg_code="22222222"
+        )
+        s.commit()
+    with Session(db_engine) as s:
+        assert s.query(DirectoryDesignerRow).one().name == "Bureau Updated OÜ"
+        assert s.query(DirectoryDesignerRow).one().reg_code == "11111111"
+        assert s.query(DirectoryBuilderRow).one().name == "Build Updated OÜ"
+
+
+def test_update_use_purpose(db_engine):
+    with Session(db_engine) as s:
+        upsert_directory_use_purpose(s, "aiamaja")
+        s.commit()
+    with Session(db_engine) as s:
+        row = s.query(DirectoryUsePurposeRow).one()
+        update_directory_use_purpose(s, row_id=row.id, value="elumaja")
+        s.commit()
+    with Session(db_engine) as s:
+        assert s.query(DirectoryUsePurposeRow).one().value == "elumaja"
+
+
+# ---------------------------------------------------------------------------
+# Backfill is idempotent
+# ---------------------------------------------------------------------------
+
+
 def test_backfill_is_idempotent(db_engine):
     audit = _build_minimal_audit()
     with Session(db_engine) as s:

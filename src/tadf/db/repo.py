@@ -487,6 +487,160 @@ def list_directory_use_purposes(s: Session) -> list[DirectoryUsePurposeRow]:
     )
 
 
+def update_directory_auditor(
+    s: Session,
+    *,
+    row_id: int,
+    full_name: str,
+    company: str | None = None,
+    company_reg_nr: str | None = None,
+    kutsetunnistus_no: str | None = None,
+    qualification: str | None = None,
+    id_code: str | None = None,
+) -> bool:
+    """Update an existing directory_auditor row in place. The Справочник
+    edit form calls this when the auditor saves changes.
+
+    Returns True on success, False if the row was deleted concurrently.
+    Raises ValueError if `full_name` collides with another row's name
+    (uniqueness is the table's invariant, and silent merging would
+    confuse the auditor — better to surface the conflict)."""
+    row = s.get(DirectoryAuditorRow, row_id)
+    if row is None:
+        return False
+    new_name = (full_name or "").strip()
+    if not new_name:
+        raise ValueError("Имя не может быть пустым")
+    if new_name != row.full_name:
+        clash = (
+            s.query(DirectoryAuditorRow)
+            .filter(DirectoryAuditorRow.full_name == new_name)
+            .filter(DirectoryAuditorRow.id != row_id)
+            .one_or_none()
+        )
+        if clash is not None:
+            raise ValueError(
+                f"Имя «{new_name}» уже занято в справочнике (id={clash.id})"
+            )
+    row.full_name = new_name
+    row.company = _strip_or_none(company)
+    row.company_reg_nr = _strip_or_none(company_reg_nr)
+    row.kutsetunnistus_no = _strip_or_none(kutsetunnistus_no)
+    row.qualification = _strip_or_none(qualification)
+    row.id_code = _strip_or_none(id_code)
+    s.flush()
+    return True
+
+
+def update_directory_client(
+    s: Session,
+    *,
+    row_id: int,
+    name: str,
+    reg_code: str | None = None,
+    contact_email: str | None = None,
+    contact_phone: str | None = None,
+    address: str | None = None,
+) -> bool:
+    row = s.get(DirectoryClientRow, row_id)
+    if row is None:
+        return False
+    new_name = (name or "").strip()
+    if not new_name:
+        raise ValueError("Имя не может быть пустым")
+    if new_name != row.name:
+        clash = (
+            s.query(DirectoryClientRow)
+            .filter(DirectoryClientRow.name == new_name)
+            .filter(DirectoryClientRow.id != row_id)
+            .one_or_none()
+        )
+        if clash is not None:
+            raise ValueError(
+                f"Заказчик «{new_name}» уже есть в справочнике (id={clash.id})"
+            )
+    row.name = new_name
+    row.reg_code = _strip_or_none(reg_code)
+    row.contact_email = _strip_or_none(contact_email)
+    row.contact_phone = _strip_or_none(contact_phone)
+    row.address = _strip_or_none(address)
+    s.flush()
+    return True
+
+
+def _update_simple(s: Session, model, key_attr: str, row_id: int, value: str) -> bool:
+    row = s.get(model, row_id)
+    if row is None:
+        return False
+    new_value = (value or "").strip()
+    if not new_value:
+        raise ValueError("Значение не может быть пустым")
+    current = getattr(row, key_attr)
+    if new_value != current:
+        clash = (
+            s.query(model)
+            .filter(getattr(model, key_attr) == new_value)
+            .filter(model.id != row_id)
+            .one_or_none()
+        )
+        if clash is not None:
+            raise ValueError(f"«{new_value}» уже есть в справочнике")
+    setattr(row, key_attr, new_value)
+    # Also bump updated_at so freshly-edited entries float to the top of
+    # any "recently changed" UI in the future.
+    row.updated_at = func.now()
+    s.flush()
+    return True
+
+
+def update_directory_designer(s: Session, *, row_id: int, name: str, reg_code: str | None = None) -> bool:
+    row = s.get(DirectoryDesignerRow, row_id)
+    if row is None:
+        return False
+    new_name = (name or "").strip()
+    if not new_name:
+        raise ValueError("Название не может быть пустым")
+    if new_name != row.name:
+        clash = (
+            s.query(DirectoryDesignerRow)
+            .filter(DirectoryDesignerRow.name == new_name)
+            .filter(DirectoryDesignerRow.id != row_id)
+            .one_or_none()
+        )
+        if clash is not None:
+            raise ValueError(f"«{new_name}» уже есть в справочнике")
+    row.name = new_name
+    row.reg_code = _strip_or_none(reg_code)
+    s.flush()
+    return True
+
+
+def update_directory_builder(s: Session, *, row_id: int, name: str, reg_code: str | None = None) -> bool:
+    row = s.get(DirectoryBuilderRow, row_id)
+    if row is None:
+        return False
+    new_name = (name or "").strip()
+    if not new_name:
+        raise ValueError("Название не может быть пустым")
+    if new_name != row.name:
+        clash = (
+            s.query(DirectoryBuilderRow)
+            .filter(DirectoryBuilderRow.name == new_name)
+            .filter(DirectoryBuilderRow.id != row_id)
+            .one_or_none()
+        )
+        if clash is not None:
+            raise ValueError(f"«{new_name}» уже есть в справочнике")
+    row.name = new_name
+    row.reg_code = _strip_or_none(reg_code)
+    s.flush()
+    return True
+
+
+def update_directory_use_purpose(s: Session, *, row_id: int, value: str) -> bool:
+    return _update_simple(s, DirectoryUsePurposeRow, "value", row_id, value)
+
+
 def backfill_directory(s: Session) -> dict[str, int]:
     """One-time copy of existing AuditorRow / ClientRow / BuildingRow values
     into the directory tables. Idempotent: rows already present (keyed by
