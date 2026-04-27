@@ -200,3 +200,125 @@ def load_audit(s: Session, audit_id: int) -> Audit:
 def list_audits(s: Session) -> list[Audit]:
     rows = s.query(AuditRow).order_by(AuditRow.year.desc(), AuditRow.seq_no.desc()).all()
     return [load_audit(s, r.id) for r in rows]
+
+
+def list_drafts(s: Session) -> list[Audit]:
+    rows = (
+        s.query(AuditRow)
+        .filter(AuditRow.status == "draft")
+        .order_by(AuditRow.updated_at.desc(), AuditRow.id.desc())
+        .all()
+    )
+    return [load_audit(s, r.id) for r in rows]
+
+
+def _apply_auditor(row: AuditorRow, src: Auditor) -> None:
+    row.full_name = src.full_name
+    row.company = src.company
+    row.company_reg_nr = src.company_reg_nr
+    row.kutsetunnistus_no = src.kutsetunnistus_no
+    row.qualification = src.qualification
+    row.id_code = src.id_code
+    row.independence_declaration = src.independence_declaration
+    row.signature_image_path = src.signature_image_path
+
+
+def _apply_building(row: BuildingRow, src: Building) -> None:
+    row.address = src.address
+    row.kataster_no = src.kataster_no
+    row.ehr_code = src.ehr_code
+    row.use_purpose = src.use_purpose
+    row.construction_year = src.construction_year
+    row.last_renovation_year = src.last_renovation_year
+    row.designer = src.designer
+    row.builder = src.builder
+    row.footprint_m2 = src.footprint_m2
+    row.height_m = src.height_m
+    row.volume_m3 = src.volume_m3
+    row.storeys_above = src.storeys_above
+    row.storeys_below = src.storeys_below
+    row.fire_class = src.fire_class
+    row.pre_2003 = src.pre_2003
+    row.substitute_docs_note = src.substitute_docs_note
+    row.site_area_m2 = src.site_area_m2
+
+
+def _apply_client(row: ClientRow, src: Client) -> None:
+    row.name = src.name
+    row.reg_code = src.reg_code
+    row.contact_email = src.contact_email
+    row.contact_phone = src.contact_phone
+    row.address = src.address
+
+
+def upsert_audit(s: Session, audit: Audit) -> int:
+    """Insert if `audit.id is None`, otherwise update the existing row in place.
+
+    Idempotent: repeated calls keep the same audit_id and never create
+    duplicate Auditor/Building/Client rows. Findings and photos are rewritten
+    wholesale on each update — `cascade='all, delete-orphan'` on the
+    relationships handles the orphan cleanup.
+    """
+    if audit.id is None:
+        new_id = save_audit(s, audit)
+        audit.id = new_id
+        return new_id
+
+    row = s.get(AuditRow, audit.id)
+    if row is None:
+        # Stale id (e.g. user deleted the draft elsewhere) — fall back to insert.
+        audit.id = None
+        return save_audit(s, audit)
+
+    _apply_auditor(row.composer, audit.composer)
+    _apply_auditor(row.reviewer, audit.reviewer)
+    _apply_building(row.building, audit.building)
+    if audit.client is not None:
+        if row.client is not None:
+            _apply_client(row.client, audit.client)
+        else:
+            client_row = _client_to_row(audit.client)
+            s.add(client_row)
+            s.flush()
+            row.client_id = client_row.id
+
+    row.seq_no = audit.seq_no
+    row.year = audit.year
+    row.type = audit.type
+    row.subtype = audit.subtype
+    row.purpose = audit.purpose
+    row.scope = audit.scope
+    row.methodology_version = audit.methodology_version
+    row.visit_date = audit.visit_date
+    row.status = audit.status
+
+    row.findings.clear()
+    s.flush()
+    for f in audit.findings:
+        fr = _finding_to_row(f)
+        fr.audit_id = row.id
+        row.findings.append(fr)
+
+    row.photos.clear()
+    s.flush()
+    for p in audit.photos:
+        pr = _photo_to_row(p)
+        pr.audit_id = row.id
+        row.photos.append(pr)
+
+    s.flush()
+    return row.id
+
+
+def delete_audit(s: Session, audit_id: int) -> None:
+    """Hard-delete an audit and its findings/photos (cascade).
+
+    Auditor/Building/Client rows are intentionally preserved — they may be
+    shared across audits, and the 7-year retention rule covers signed
+    artifacts on disk, not the SQLite mirror.
+    """
+    row = s.get(AuditRow, audit_id)
+    if row is None:
+        return
+    s.delete(row)
+    s.flush()

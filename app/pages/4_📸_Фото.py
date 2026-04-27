@@ -13,12 +13,15 @@ from pathlib import Path  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
+from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
 from tadf.config import AUDITS_DIR  # noqa: E402
 from tadf.llm import caption_photo  # noqa: E402
 from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.models import Photo  # noqa: E402
 from tadf.sections import SECTION_KEYS as ALL_SECTION_KEYS  # noqa: E402
 from tadf.sections import SECTION_LABELS as ALL_SECTION_LABELS  # noqa: E402
+
+flush_improve_pending()
 
 st.title("Фотографии")
 
@@ -140,3 +143,15 @@ for i, p in enumerate(audit.photos):
                 audit.photos.pop(i)
                 set_current(audit)
                 st.rerun()
+
+        # Polish/translate for the manual caption — useful when the auditor
+        # types short Russian notes or rough Estonian and wants the text in
+        # formal Estonian without using the vision-based AI caption.
+        improve_button_for(
+            text=new_caption or "",
+            state_key_prefix=f"imp_cap_{i}",
+            section_ref=p.section_ref,
+            text_widget_key=f"cap_{i}",
+            apply=lambda v, _p=p: setattr(_p, "caption_auditor", v),
+            label="✨ Улучшить подпись",
+        )

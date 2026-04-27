@@ -13,14 +13,17 @@ and 14 are hard-locked from drafter and polish — auditor only.
 from tadf.llm.captioner import caption_photo
 from tadf.llm.client import MissingAPIKey, is_available
 from tadf.llm.drafter import LOCKED_SECTIONS, draft_narrative, is_locked
+from tadf.llm.improve import ImproveResult, improve_text
 from tadf.llm.polish import polish_text
 from tadf.llm.ranker import rank_legal_refs
 
 __all__ = [
+    "ImproveResult",
     "LOCKED_SECTIONS",
     "MissingAPIKey",
     "caption_photo",
     "draft_narrative",
+    "improve_text",
     "is_available",
     "is_locked",
     "polish_text",

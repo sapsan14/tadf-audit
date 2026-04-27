@@ -10,6 +10,7 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import get_current, set_current  # noqa: E402
+from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
 from tadf.legal.loader import for_section  # noqa: E402
 from tadf.llm import (  # noqa: E402
     draft_narrative,
@@ -22,6 +23,8 @@ from tadf.llm import (  # noqa: E402
 )
 from tadf.models import Finding  # noqa: E402
 from tadf.sections import SECTION_KEYS, SECTION_LABELS  # noqa: E402
+
+flush_improve_pending()
 
 st.title("Наблюдения")
 st.caption(
@@ -225,6 +228,13 @@ with c2:
         key=f"new_finding_rec_{scope}",
         help="Что владельцу следует сделать.",
     )
+    improve_button_for(
+        text=new_recommendation or "",
+        state_key_prefix=f"imp_new_rec_{scope}",
+        section_ref=new_section,
+        text_widget_key=f"new_finding_rec_{scope}",
+        apply=lambda _v: None,  # widget value is restored via flush_improve_pending
+    )
 
 suggestions = _legal_refs_for(new_section)
 new_legal_codes: list[str] = []
@@ -332,6 +342,13 @@ for i, f in enumerate(audit.findings):
                 height=60,
                 key=f"rec_{scope}_{i}",
             )
+            improve_button_for(
+                text=edited_recommendation or "",
+                state_key_prefix=f"imp_rec_{scope}_{i}",
+                section_ref=f.section_ref,
+                text_widget_key=f"rec_{scope}_{i}",
+                apply=lambda v, _f=f: setattr(_f, "recommendation", v or None),
+            )
 
         section_for_refs = edited_section if edited_section else f.section_ref
         sugs = _legal_refs_for(section_for_refs)
@@ -373,26 +390,33 @@ for i, f in enumerate(audit.findings):
                 type="primary",
                 use_container_width=True,
             )
-            polish_clicked = False
-            rank_clicked = False
-            if llm_on:
-                polish_clicked = b2.button(
-                    "✏️ Polish",
-                    key=f"polish_btn_{scope}_{i}",
-                    disabled=polish_disabled,
-                    help=(
-                        "Sonnet поправит грамматику и терминологию, не меняя факты."
-                        if not polish_disabled
-                        else "Раздел 11/14 — только аудитор."
-                    ),
-                    use_container_width=True,
-                )
-                rank_clicked = b3.button(
-                    "💡 Ссылки",
-                    key=f"rank_btn_{scope}_{i}",
-                    help="Haiku ранжирует подходящие ссылки из курируемого списка.",
-                    use_container_width=True,
-                )
+            # Polish/Rank buttons render always — disabled when LLM is off so
+            # the auditor sees the integrations exist (vs. silently missing).
+            if polish_disabled:
+                polish_help = "Раздел 11/14 — только аудитор."
+            elif not llm_on:
+                polish_help = "ИИ выключен — настройте ANTHROPIC_API_KEY."
+            else:
+                polish_help = "Sonnet поправит грамматику и терминологию, не меняя факты."
+            rank_help = (
+                "Haiku ранжирует подходящие ссылки из курируемого списка."
+                if llm_on
+                else "ИИ выключен — настройте ANTHROPIC_API_KEY."
+            )
+            polish_clicked = b2.button(
+                "✏️ Polish",
+                key=f"polish_btn_{scope}_{i}",
+                disabled=polish_disabled or not llm_on,
+                help=polish_help,
+                use_container_width=True,
+            )
+            rank_clicked = b3.button(
+                "💡 Ссылки",
+                key=f"rank_btn_{scope}_{i}",
+                disabled=not llm_on,
+                help=rank_help,
+                use_container_width=True,
+            )
             del_clicked = b4.button(
                 "🗑️ Удалить",
                 key=f"del_{scope}_{i}",
