@@ -72,6 +72,18 @@ section[data-testid="stSidebar"] {{
     position: relative !important;
 }}
 
+/* Sidebar inner container as a flex column so user content can fill the
+   available height — without this, user content has only natural height
+   and short viewports cause its content to extend down to where the
+   absolute footer sits, overlapping it. */
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+    display: flex !important;
+    flex-direction: column !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+    flex: 1 1 auto !important;
+}}
+
 /* ---- Logo header: taller, centered, allow the SVG full height ---- */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
     display: flex !important;
@@ -104,16 +116,18 @@ section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
     margin: 0 auto !important;
 }}
 
-/* Tighten the gap between the nav and the usage block below it. */
+/* No extra margin under the nav — user wants the usage block right under
+   "Правовая база" (the last menu item). */
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
-    margin-bottom: 0.5rem !important;
+    margin-bottom: 0 !important;
 }}
 
-/* User content gets bottom padding so its content doesn't hide under the
+/* User content stacks its children at the top with zero top padding;
+   bottom padding reserves room so its content can never overlap the
    absolutely-positioned footer below it. */
 section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
-    padding-top: 0.5rem !important;
-    padding-bottom: 130px !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 150px !important;
 }}
 
 /* ---- Footer: pinned to the bottom of the sidebar via position:absolute ----
