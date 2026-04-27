@@ -17,7 +17,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tadf.corpus.parse_doc import LibreofficeMissing, is_available as libreoffice_available
+from tadf.corpus.parse_doc import LibreofficeMissing
+from tadf.corpus.parse_doc import is_available as libreoffice_available
 from tadf.corpus.store import PARSERS, ingest_file
 
 ROOT = Path(__file__).resolve().parent.parent
