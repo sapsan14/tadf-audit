@@ -10,7 +10,11 @@ sys.path.insert(0, str(_root / "src"))
 import streamlit as st  # noqa: E402
 
 from app._state import ensure_draft_saved, get_current, set_current  # noqa: E402
-from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
+from app._widgets import (  # noqa: E402
+    PENDING_PREFIX,
+    flush_improve_pending,
+    improve_button_for,
+)
 from tadf.legal.loader import for_section  # noqa: E402
 from tadf.llm import (  # noqa: E402
     draft_narrative,
@@ -283,8 +287,13 @@ if add_col.button("➕ Добавить наблюдение", type="primary", k
         st.session_state[_LAST_SECTION_KEY] = new_section
         st.session_state[_LAST_SEVERITY_KEY] = new_severity
         # Clear new-finding state so the form is empty for the next entry.
-        st.session_state[NEW_OBS_KEY] = ""
-        st.session_state[f"new_finding_rec_{scope}"] = ""
+        # Both text_area widgets above have already rendered this run, so a
+        # direct `st.session_state[widget_key] = ""` raises StreamlitAPI-
+        # Exception. Queue the clear via PENDING_PREFIX — `flush_improve_
+        # pending()` at the top of the next run applies it before any
+        # widget re-renders.
+        st.session_state[f"{PENDING_PREFIX}{NEW_OBS_KEY}"] = ""
+        st.session_state[f"{PENDING_PREFIX}new_finding_rec_{scope}"] = ""
         set_current(audit)
         st.success("Наблюдение добавлено")
         st.rerun()

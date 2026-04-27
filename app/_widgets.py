@@ -406,7 +406,8 @@ def hint_caption(message: str | None) -> None:
         st.caption(f":orange[⚠ {message}]")
 
 
-_PENDING_PREFIX = "_imp_pending_widget_"
+PENDING_PREFIX = "_imp_pending_widget_"
+_PENDING_PREFIX = PENDING_PREFIX  # backwards-compat alias for existing private callers
 
 
 def autofill_from_picker(
