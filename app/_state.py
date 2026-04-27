@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 from datetime import date, datetime
 
@@ -30,7 +31,9 @@ def _new_audit() -> Audit:
         seq_no=seq_no,
         year=year,
         type="EA",
-        subtype="kasutuseelne",
+        # Per father's preference (most common subtype in his practice).
+        # `kasutuseelne` and `korraline` remain as picker options.
+        subtype="erakorraline",
         visit_date=date.today(),
         composer=Auditor(full_name=""),
         reviewer=Auditor(full_name="Fjodor Sokolov", kutsetunnistus_no="148515"),
@@ -40,8 +43,38 @@ def _new_audit() -> Audit:
 
 
 def get_current() -> Audit:
-    if "audit" not in st.session_state:
-        st.session_state["audit"] = _new_audit()
+    if "audit" in st.session_state:
+        return st.session_state["audit"]
+
+    # Browser refresh / new session — try to restore from URL ?audit_id=N.
+    # `st.query_params` was added in 1.30; fall back gracefully.
+    try:
+        qp = st.query_params  # type: ignore[attr-defined]
+        raw = qp.get("audit_id")
+        if raw is not None:
+            try:
+                aid = int(raw)
+            except (TypeError, ValueError):
+                aid = None
+            if aid is not None:
+                with session_scope() as s:
+                    try:
+                        st.session_state["audit"] = load_audit(s, aid)
+                        st.session_state["loaded_id"] = aid
+                        return st.session_state["audit"]
+                    except ValueError:
+                        # The audit_id in the URL no longer exists (deleted
+                        # in another tab). Fall through to a fresh draft;
+                        # also clear the stale query param so a subsequent
+                        # refresh doesn't keep failing.
+                        with contextlib.suppress(AttributeError, KeyError):
+                            qp.pop("audit_id")
+    except Exception:
+        # Streamlit version doesn't support st.query_params, or it raised
+        # in an unexpected way — start a fresh draft.
+        pass
+
+    st.session_state["audit"] = _new_audit()
     return st.session_state["audit"]
 
 
@@ -57,6 +90,24 @@ def reload_from_db(audit_id: int) -> None:
     # re-fingerprints against the just-loaded state, not the previous
     # audit's state.
     st.session_state.pop(_AUTO_SAVE_HASH_KEY, None)
+    # Mirror into the URL so a browser refresh restores the same draft.
+    _sync_audit_id_query_param(audit_id)
+
+
+def _sync_audit_id_query_param(audit_id: int | None) -> None:
+    """Best-effort URL ?audit_id=N updater. Silently no-op on Streamlit
+    versions that don't expose st.query_params."""
+    try:
+        qp = st.query_params  # type: ignore[attr-defined]
+    except AttributeError:
+        return
+    try:
+        if audit_id is None:
+            qp.pop("audit_id", None)  # type: ignore[arg-type]
+        else:
+            qp["audit_id"] = str(audit_id)
+    except Exception:
+        pass
 
 
 def all_saved_audits() -> list[Audit]:
@@ -75,6 +126,7 @@ def start_new_draft() -> None:
     st.session_state["audit"] = _new_audit()
     st.session_state.pop("loaded_id", None)
     st.session_state.pop(_AUTO_SAVE_HASH_KEY, None)
+    _sync_audit_id_query_param(None)
 
 
 # Session-state key tracking the last-persisted audit fingerprint, so
@@ -187,6 +239,7 @@ def ensure_draft_saved(audit: Audit) -> bool:
         return False  # nothing changed since the last successful save
 
     snapshot_json = audit.model_dump_json()
+    was_new_draft = audit.id is None
     with session_scope() as s:
         new_id = upsert_audit(s, audit)
         # Write a history snapshot in the same transaction so a partial
@@ -195,6 +248,11 @@ def ensure_draft_saved(audit: Audit) -> bool:
     audit.id = new_id
     set_current(audit)
     st.session_state[_AUTO_SAVE_HASH_KEY] = current_hash
+    if was_new_draft:
+        # First save assigned an id — pin it in the URL so a browser
+        # refresh restores the same draft.
+        st.session_state["loaded_id"] = new_id
+        _sync_audit_id_query_param(new_id)
     return True
 
 

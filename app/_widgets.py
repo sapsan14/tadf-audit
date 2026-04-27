@@ -86,13 +86,21 @@ def address_picker(
     state_key = f"_addr_search_{key_prefix}"
     query_key = f"_addr_q_{key_prefix}"
 
-    cols = st.columns([5, 1, 1])
+    # Render the label as a separate line so text-input + buttons can
+    # share a single row aligned at the bottom. With the label baked
+    # into the text_input only, the buttons float above the input's
+    # baseline; in narrow column splits (e.g. designer/builder side-by-
+    # side on the Здание page) that's enough to wrap "Искать"/"Очистить"
+    # to two lines.
+    st.markdown(f"**{label}**")
+    cols = st.columns([5, 2, 2], vertical_alignment="bottom")
     query = cols[0].text_input(
         label,
         value=st.session_state.get(query_key, ""),
         key=query_key,
         placeholder=placeholder,
         help=help_text,
+        label_visibility="collapsed",
     )
     do_search = cols[1].button(
         "Искать",
@@ -157,13 +165,21 @@ def company_picker(
     state_key = f"_co_search_{key_prefix}"
     query_key = f"_co_q_{key_prefix}"
 
-    cols = st.columns([5, 1, 1])
+    # Render the label as a separate line so text-input + buttons can
+    # share a single row aligned at the bottom. With the label baked
+    # into the text_input only, the buttons float above the input's
+    # baseline; in narrow column splits (e.g. designer/builder side-by-
+    # side on the Здание page) that's enough to wrap "Искать"/"Очистить"
+    # to two lines.
+    st.markdown(f"**{label}**")
+    cols = st.columns([5, 2, 2], vertical_alignment="bottom")
     query = cols[0].text_input(
         label,
         value=st.session_state.get(query_key, ""),
         key=query_key,
         placeholder=placeholder,
         help=help_text,
+        label_visibility="collapsed",
     )
     do_search = cols[1].button(
         "Искать",
