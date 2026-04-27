@@ -422,6 +422,33 @@ jobs:
           echo "$body" | head -c 400
           echo "$body" | grep -qi "streamlit\|tadf"
 
+      - name: FastAPI sidecar /api/health is reachable through Caddy
+        run: |
+          # Caddy must route /api/* → tadf:8001 (the FastAPI sidecar that
+          # receives Teatmik imports from the bookmarklet/userscript and
+          # generally exists for in-browser-helper auth tokens). If this
+          # fails, Caddy is still serving Streamlit on /api/* — config
+          # didn't reload.
+          body=$(curl -fsS "https://${DOMAIN}/api/health")
+          echo "Body: $body"
+          echo "$body" | grep -q '"ok":true'
+
+      - name: CORS preflight on /api/import-teatmik works for teatmik.ee
+        run: |
+          # The bookmarklet running on www.teatmik.ee makes a cross-origin
+          # POST. Browser sends OPTIONS preflight with custom headers; we
+          # need allow-origin + allow-headers (incl. X-Source-URL) on the
+          # response. If this fails, fetch() in the bookmarklet errors
+          # out with "TypeError: Failed to fetch".
+          headers=$(curl -fsSI -X OPTIONS \
+            -H "Origin: https://www.teatmik.ee" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: authorization,content-type,x-source-url" \
+            "https://${DOMAIN}/api/import-teatmik/1")
+          echo "$headers"
+          echo "$headers" | grep -qi "^access-control-allow-origin:"
+          echo "$headers" | grep -qi "^access-control-allow-methods:"
+
       - name: Dump server logs on failure
         if: failure()
         env:
