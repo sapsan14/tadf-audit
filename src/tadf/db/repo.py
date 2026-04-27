@@ -825,3 +825,31 @@ def load_snapshot(s: Session, snapshot_id: int) -> Audit | None:
         return Audit.model_validate_json(row.snapshot_json)
     except Exception:
         return None
+
+
+def delete_snapshot(s: Session, snapshot_id: int) -> bool:
+    """Hard-delete one history snapshot by id. Returns True if a row
+    was deleted, False if no such snapshot existed.
+
+    The current draft state in `audit` is unaffected — only the history
+    record disappears. version_no values are NOT renumbered (so v3, v5,
+    v7 remain v3, v5, v7 even after v4 is gone) — keeps URLs / button
+    keys stable and makes "the v4 I just deleted" obvious in the log.
+    """
+    result = s.execute(
+        delete(AuditSnapshotRow).where(AuditSnapshotRow.id == snapshot_id)
+    )
+    s.flush()
+    return (result.rowcount or 0) > 0
+
+
+def delete_all_snapshots(s: Session, audit_id: int) -> int:
+    """Hard-delete every history snapshot for an audit. Returns count
+    of rows removed. The audit row itself stays — only its history
+    is wiped so the draft can keep being edited from a clean slate.
+    Useful when the snapshots tab grew unwieldy from many auto-saves."""
+    result = s.execute(
+        delete(AuditSnapshotRow).where(AuditSnapshotRow.audit_id == audit_id)
+    )
+    s.flush()
+    return result.rowcount or 0

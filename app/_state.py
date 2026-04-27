@@ -9,7 +9,9 @@ from datetime import date, datetime
 import streamlit as st
 
 from tadf.db.repo import (
+    delete_all_snapshots,
     delete_audit,
+    delete_snapshot,
     list_audits,
     list_drafts,
     list_snapshots,
@@ -288,3 +290,19 @@ def restore_audit_snapshot(snapshot_id: int) -> bool:
     # snapshot) instead of treating the restore as a no-op.
     st.session_state.pop(_AUTO_SAVE_HASH_KEY, None)
     return True
+
+
+def delete_audit_snapshot(snapshot_id: int) -> bool:
+    """Hard-delete one history version of any audit. Returns True when
+    a row was actually removed. The currently-loaded audit (if any) is
+    left untouched — only the history record disappears."""
+    with session_scope() as s:
+        return delete_snapshot(s, snapshot_id)
+
+
+def clear_audit_snapshots(audit_id: int) -> int:
+    """Wipe all history snapshots of one audit. Returns the count
+    deleted. The audit row itself stays editable; its «🕘 История»
+    list will be empty until the next auto-save creates a fresh v1."""
+    with session_scope() as s:
+        return delete_all_snapshots(s, audit_id)
