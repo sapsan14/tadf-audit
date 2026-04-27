@@ -60,28 +60,50 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
      - stSidebarHeader  (Os)        display:flex; justify-content:space-between;
                                     height:spacing.headerHeight   (≈3rem — clips a tall logo)
      - stSidebarUserContent (Ts)    plain block, no flex
-   We need a taller header so the 110px logo isn't clipped, the logo
-   centered (overriding space-between), and the footer pinned to the
-   bottom of the sidebar. Flex auto-margins kept failing because Streamlit
-   wraps each st.markdown in extra divs that don't propagate auto-margin,
-   so we use position:absolute against the sidebar itself instead. */
+   The footer pin is achieved by an explicit flex spacer rendered between
+   the usage block and the footer in main.py — the spacer's stMarkdown
+   wrapper gets flex:1 below, growing to consume all remaining vertical
+   space. Auto-margin and absolute-positioning approaches both lost to
+   Streamlit's stVerticalBlock wrapper between user content and the
+   markdown elements. */
 
-/* Make the sidebar a positioned ancestor so an absolute footer pins
-   to its bottom, regardless of internal wrappers. */
-section[data-testid="stSidebar"] {{
-    position: relative !important;
-}}
-
-/* Sidebar inner container as a flex column so user content can fill the
-   available height — without this, user content has only natural height
-   and short viewports cause its content to extend down to where the
-   absolute footer sits, overlapping it. */
+/* Sidebar inner container becomes a full-height flex column so user
+   content can grow to fill remaining vertical space. */
 section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
     display: flex !important;
     flex-direction: column !important;
+    min-height: 100vh !important;
 }}
+
+/* User content area: flex column that fills remaining space. The
+   children (and Streamlit's stVerticalBlock wrapper) inherit this so
+   the spacer below can grow. */
 section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+    display: flex !important;
+    flex-direction: column !important;
     flex: 1 1 auto !important;
+    min-height: 0 !important;
+}}
+
+/* Streamlit wraps the sidebar children in a stVerticalBlock that's
+   itself a flex column — make it grow to fill the user-content area. */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div {{
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+}}
+
+/* The flex spacer (an empty div rendered between usage and footer in
+   main.py) grows to push the footer all the way down. We target the
+   stMarkdown wrapper that contains it. */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] *:has(> .tadf-sidebar-spacer) {{
+    flex: 1 1 auto !important;
+    min-height: 1rem !important;
+}}
+.tadf-sidebar-spacer {{
+    height: 100%;
+    min-height: 1rem;
 }}
 
 /* ---- Logo header: taller, centered, allow the SVG full height ---- */
@@ -116,23 +138,13 @@ section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
     margin: 0 auto !important;
 }}
 
-/* No extra margin under the nav — user wants the usage block right under
+/* No extra margin under the nav — usage block lands directly under
    "Правовая база" (the last menu item). */
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
     margin-bottom: 0 !important;
 }}
 
-/* User content stacks its children at the top with zero top padding;
-   bottom padding reserves room so its content can never overlap the
-   absolutely-positioned footer below it. */
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
-    padding-top: 0.25rem !important;
-    padding-bottom: 150px !important;
-}}
-
-/* ---- Footer: pinned to the bottom of the sidebar via position:absolute ----
-   Wrapped through stMarkdown (the immediate child of stSidebarUserContent)
-   — promote that wrapper to absolute against the sidebar. */
+/* ---- Footer styling (positioning handled by the spacer above) ---- */
 .tadf-sidebar-footer {{
     padding: 0.75rem 0.5rem 0.75rem 0.5rem;
     border-top: 1px solid rgba(128, 128, 128, 0.2);
@@ -140,23 +152,11 @@ section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
     color: rgba(128, 128, 128, 0.85);
     text-align: center;
     line-height: 1.5;
-    background: inherit;
 }}
 .tadf-sidebar-footer a {{
     color: inherit;
     text-decoration: none;
     border-bottom: 1px dotted rgba(128, 128, 128, 0.5);
-}}
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"]
-    [data-testid="stMarkdown"]:has(.tadf-sidebar-footer),
-section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"]
-    > *:has(.tadf-sidebar-footer) {{
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    margin: 0 !important;
-    z-index: 5 !important;
 }}
 </style>
 """,
