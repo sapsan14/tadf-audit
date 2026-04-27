@@ -381,8 +381,19 @@ st.caption(
 # 📥 Pending imports from Teatmik bookmarklet/userscript with target=client.
 # Shown on this page so the auditor sees the result where they triggered it.
 # Other targets (designer/builder) live on the Здание page.
+#
+# @st.fragment(run_every="5s") makes Streamlit re-poll pending_import every
+# 5 seconds without user interaction — so when the auditor returns from
+# Teatmik (where the bookmarklet POSTed an import), the row appears here
+# automatically instead of only after they click something else.
+# Apply uses st.rerun(scope="app") so the client widgets reseed properly.
 # ---------------------------------------------------------------------------
-if audit.id is not None:
+
+
+@st.fragment(run_every="5s")
+def _render_pending_client_imports() -> None:
+    if audit.id is None:
+        return
     _client_imports = [
         imp for imp in list_pending(audit.id)
         if imp.kind == "teatmik" and imp.payload.get("target") == "client"
@@ -426,10 +437,13 @@ if audit.id is not None:
                 ):
                     st.session_state.pop(w, None)
                 mark_applied(imp.id)
-                st.rerun()
+                st.rerun(scope="app")
             if cr.button("❌ Отклонить", key=f"imp_client_reject_{imp.id}"):
                 mark_rejected(imp.id)
-                st.rerun()
+                st.rerun(scope="app")
+
+
+_render_pending_client_imports()
 
 set_current(audit)
 st.success(f"Текущий номер: **{audit.display_no()}** ({audit.type} / {audit.subtype})")
