@@ -72,22 +72,26 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
     margin-bottom: 0.25rem !important;
 }}
 
-/* ---- Logo: stretch to full sidebar width ---- */
+/* ---- Logo: centered, height-bounded so it doesn't overlap the nav ----
+   The SVG artwork is square (viewBox 800×800), so stretching width to 100%
+   of the sidebar produced a ~240px-tall square that crashed into the first
+   menu item. Cap by height instead and let width scale proportionally. */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
     padding: 0.75rem 0.75rem 0.5rem 0.75rem !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > a,
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > div {{
-    width: 100% !important;
     max-width: 100% !important;
-    display: block !important;
+    display: flex !important;
+    justify-content: center !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stLogo"],
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
-    width: 100% !important;
+    width: auto !important;
     max-width: 100% !important;
     height: auto !important;
-    max-height: none !important;
+    max-height: 96px !important;
+    margin: 0 auto !important;
     display: block !important;
     object-fit: contain !important;
 }}
