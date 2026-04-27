@@ -8,7 +8,6 @@ from tadf.db.repo import (
     delete_audit,
     list_audits,
     list_drafts,
-    load_audit,
     save_audit,
     upsert_audit,
 )

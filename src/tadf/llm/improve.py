@@ -45,9 +45,7 @@ def _looks_like_bullets(text: str) -> bool:
     stripped = text.lstrip()
     if any(stripped.startswith(m) for m in ("- ", "• ", "* ")):
         return True
-    if "\n" in text and len(text.split()) < 30:
-        return True
-    return False
+    return bool("\n" in text and len(text.split()) < 30)
 
 
 def improve_text(text: str, *, section_ref: str | None = None) -> ImproveResult:

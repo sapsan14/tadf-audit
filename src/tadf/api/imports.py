@@ -161,16 +161,16 @@ def map_ehr(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def map_teatmik(payload: dict[str, Any]) -> dict[str, Any]:
-    """Teatmik payload is a small dict the userscript builds from the
-    company-detail page DOM. Expected keys: name, reg_code, address,
-    status. Returns the same dict (minus empty values) — no field-name
-    rename needed for the Client model."""
-    out = {
-        "name": payload.get("name"),
-        "reg_code": payload.get("reg_code"),
-        "address": payload.get("address"),
-        "status": payload.get("status"),
-    }
+    """Teatmik payload is a small dict the userscript / bookmarklet
+    builds from the company-detail page DOM. Expected keys:
+    name, reg_code, address, status, email, phone, legal_form, capital,
+    plus an optional `target` hint (`designer` / `builder` / `client`)
+    that mirrors which TADF form section the auditor was on when
+    they triggered the lookup. Returns the same dict (minus empty
+    values) — no field-name rename needed for the Client model."""
+    keys = ("name", "reg_code", "address", "status", "email", "phone",
+            "legal_form", "capital", "target")
+    out = {k: payload.get(k) for k in keys}
     return {k: v for k, v in out.items() if v not in (None, "")}
 
 
