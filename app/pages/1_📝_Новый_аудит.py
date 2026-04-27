@@ -218,23 +218,44 @@ _CLIENT_AUTOFILL = {
     "contact_phone": k("client_phone"),
     "address": k("client_addr"),
 }
+if audit.client is None:
+    from tadf.models import Client
+
+    audit.client = Client(name="")
+
+
+def _apply_to_composer(field: str, value: object) -> None:
+    setattr(audit.composer, field, value)
+
+
+def _apply_to_reviewer(field: str, value: object) -> None:
+    setattr(audit.reviewer, field, value)
+
+
+def _apply_to_client(field: str, value: object) -> None:
+    setattr(audit.client, field, value)
+
+
 autofill_from_picker(
     slot=f"composer_{scope}",
     name_widget_key=k("composer_name"),
     field_to_widget=_COMPOSER_AUTOFILL,
     fetch=latest_auditor_by_name,
+    apply_to_model=_apply_to_composer,
 )
 autofill_from_picker(
     slot=f"reviewer_{scope}",
     name_widget_key=k("reviewer_name"),
     field_to_widget=_REVIEWER_AUTOFILL,
     fetch=latest_auditor_by_name,
+    apply_to_model=_apply_to_reviewer,
 )
 autofill_from_picker(
     slot=f"client_{scope}",
     name_widget_key=k("client_name"),
     field_to_widget=_CLIENT_AUTOFILL,
     fetch=latest_client_by_name,
+    apply_to_model=_apply_to_client,
 )
 
 
