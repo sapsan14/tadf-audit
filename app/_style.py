@@ -54,7 +54,17 @@ def apply_consistent_layout(page_title: str = "TADF Ehitus") -> None:
     padding-right: 2rem;
 }}
 
-/* ---- Sidebar layout ---- */
+/* ---- Sidebar layout ----
+   Force the WHOLE sidebar to be a full-height flex column so the user
+   content area can occupy all remaining vertical space, and the footer's
+   margin-top:auto can push it to the viewport bottom. Without this, the
+   sidebar's outer container is block-layout and the user content collapses
+   to fit-content height — leaving a big empty gap below the footer. */
+section[data-testid="stSidebar"] > div:first-child {{
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+}}
 
 /* Make the user-content area a flex column that fills the remaining space
    below the logo + nav. Footer with margin-top:auto then pins to the
@@ -72,20 +82,17 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{
     margin-bottom: 0.25rem !important;
 }}
 
-/* ---- Logo: fixed-square, centered ----
+/* ---- Logo: fixed-square, flex-centered ----
    The SVG artwork is square (viewBox 800×800). st.logo() renders the image
    either as <img> or as a div with background-image (varies by Streamlit
-   build), so we fix BOTH dimensions explicitly. Earlier attempts at
-   width:100% blew the logo up to overflow the nav; height:auto+max-height
-   collapsed the background-image variant to 0×0. */
+   build), so we fix BOTH dimensions explicitly and center the wrapper via
+   flex on the header itself (text-align/inline-block didn't center reliably
+   because Streamlit's wrapper has its own inline width). */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
-    padding: 1rem 0.75rem 0.5rem 0.75rem !important;
-    text-align: center !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > a,
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] > div {{
-    display: inline-block !important;
-    margin: 0 auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 1.25rem 0.5rem 0.75rem 0.5rem !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stLogo"] {{
     height: 96px !important;
@@ -93,16 +100,12 @@ section[data-testid="stSidebar"] [data-testid="stLogo"] {{
     background-size: contain !important;
     background-position: center !important;
     background-repeat: no-repeat !important;
-    margin: 0 auto !important;
-    display: block !important;
     object-fit: contain !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] img {{
     height: 96px !important;
     width: auto !important;
     max-width: 100% !important;
-    margin: 0 auto !important;
-    display: block !important;
     object-fit: contain !important;
 }}
 
