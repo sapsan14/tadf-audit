@@ -1,49 +1,89 @@
-"""Autocomplete suggestions sourced from the existing audit database.
+"""Autocomplete suggestions sourced from the directory tables.
 
 Used by the form pages to seed `selectbox(accept_new_options=True)` widgets so
 the auditor sees previously-entered values when they start typing — addresses,
 client names, composer names, kasutusotstarve, etc. — and can either pick or
 type a new one.
+
+Source of truth is the `directory_*` tables (one row per unique name/value),
+NOT the per-audit AuditorRow / BuildingRow / ClientRow rows. Those still
+exist for audit history; the directory mirrors the most-recent values per
+name and is mirrored on every save (`repo._mirror_to_directory`). Switching
+to the directory means:
+
+  * the dropdown stays small and curated (no DISTINCT-over-history scan),
+  * the auditor can explicitly delete a stale entry — that's impossible
+    with the legacy `_distinct(AuditorRow.full_name)` query, which would
+    re-surface the deleted name on the next save,
+  * autofill returns one canonical value per name (no "latest of N audits
+    that all spelled the same name slightly differently").
 """
 
 from __future__ import annotations
 
 from sqlalchemy import distinct
 
-from tadf.db.orm import AuditorRow, AuditRow, BuildingRow, ClientRow
+from tadf.db.orm import (
+    AuditRow,
+    BuildingRow,
+    DirectoryAuditorRow,
+    DirectoryBuilderRow,
+    DirectoryClientRow,
+    DirectoryDesignerRow,
+    DirectoryUsePurposeRow,
+)
 from tadf.db.session import session_scope
 
 
-def _distinct(column) -> list[str]:
+def _names(model, attr: str) -> list[str]:
     with session_scope() as s:
-        rows = s.query(distinct(column)).all()
-    out = sorted({(v[0] or "").strip() for v in rows if v[0]})
-    return out
+        rows = s.query(getattr(model, attr)).order_by(getattr(model, attr)).all()
+    return [(v[0] or "").strip() for v in rows if v[0] and v[0].strip()]
 
 
 def building_addresses() -> list[str]:
-    return _distinct(BuildingRow.address)
+    """Addresses still come from per-audit BuildingRow rows. We don't keep a
+    directory of addresses — each audit has its own (the in-ADS address
+    picker on the page is the canonical source for new addresses).
+    """
+    with session_scope() as s:
+        rows = s.query(distinct(BuildingRow.address)).all()
+    return sorted({(v[0] or "").strip() for v in rows if v[0]})
 
 
 def building_use_purposes() -> list[str]:
-    return _distinct(BuildingRow.use_purpose)
+    return _names(DirectoryUsePurposeRow, "value")
 
 
 def client_names() -> list[str]:
-    return _distinct(ClientRow.name)
+    return _names(DirectoryClientRow, "name")
 
 
 def composer_names() -> list[str]:
-    return _distinct(AuditorRow.full_name)
+    return _names(DirectoryAuditorRow, "full_name")
 
 
 def composer_companies() -> list[str]:
-    return _distinct(AuditorRow.company)
+    """Companies aggregated from all known auditors. We don't keep a separate
+    directory_company table — the same company may appear under multiple
+    auditors, and Ariregister already provides the authoritative source via
+    `tadf.external.ariregister_client`. Sorted, deduped, empty-stripped."""
+    with session_scope() as s:
+        rows = s.query(distinct(DirectoryAuditorRow.company)).all()
+    return sorted({(v[0] or "").strip() for v in rows if v[0] and v[0].strip()})
+
+
+def designer_names() -> list[str]:
+    return _names(DirectoryDesignerRow, "name")
+
+
+def builder_names() -> list[str]:
+    return _names(DirectoryBuilderRow, "name")
 
 
 def latest_auditor_by_name(full_name: str | None) -> dict | None:
-    """Return the most-recent AuditorRow that matches `full_name` as a
-    plain dict (id excluded), or None if no match.
+    """Return the directory record for `full_name` as a plain dict (id
+    excluded), or None if no match.
 
     Used by the «Новый аудит» page to auto-fill the rest of the auditor
     fields the moment the user picks a previously-entered name from the
@@ -55,10 +95,9 @@ def latest_auditor_by_name(full_name: str | None) -> dict | None:
         return None
     with session_scope() as s:
         row = (
-            s.query(AuditorRow)
-            .filter(AuditorRow.full_name == name)
-            .order_by(AuditorRow.id.desc())
-            .first()
+            s.query(DirectoryAuditorRow)
+            .filter(DirectoryAuditorRow.full_name == name)
+            .one_or_none()
         )
         if row is None:
             return None
@@ -98,17 +137,16 @@ def _latest_override(column: str, exclude_audit_id: int | None) -> str | None:
 
 
 def latest_client_by_name(name: str | None) -> dict | None:
-    """Return the most-recent ClientRow that matches `name` (case-insensitive,
-    after strip), as a plain dict (id excluded), or None if no match."""
+    """Return the directory record for `name` (case-insensitive after strip),
+    as a plain dict (id excluded), or None if no match."""
     cleaned = (name or "").strip()
     if not cleaned:
         return None
     with session_scope() as s:
         row = (
-            s.query(ClientRow)
-            .filter(ClientRow.name == cleaned)
-            .order_by(ClientRow.id.desc())
-            .first()
+            s.query(DirectoryClientRow)
+            .filter(DirectoryClientRow.name == cleaned)
+            .one_or_none()
         )
         if row is None:
             return None
