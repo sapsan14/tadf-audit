@@ -25,7 +25,12 @@ users:
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
     ssh_authorized_keys:
+      # GitHub Actions deploy key (rotates via DEPLOY_SSH_PUBLIC_KEY secret).
       - __DEPLOY_SSH_PUBLIC_KEY__
+      # Anton (sokolovmeister@gmail.com) — personal id_ed25519 so the
+      # operator can SSH directly without juggling the GH Actions deploy
+      # key. Public key only; safe to commit.
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMxRZWtFPsKUdbRw80qBpg04IuEpnZ7kz4LF+G5FIax0 sokolovmeister@gmail.com
 
 write_files:
   - path: /etc/ssh/sshd_config.d/10-tadf.conf
