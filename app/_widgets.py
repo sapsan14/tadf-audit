@@ -241,6 +241,110 @@ def company_picker(
             on_select(h)
 
 
+def client_picker(
+    *,
+    name_widget_key: str,
+    state_key_prefix: str,
+    suggestions: list[str],
+    current_name: str | None,
+    on_apply: Callable[[CompanyHit], None],
+    help_text: str | None = (
+        "Введите название организации или ФИО физ. лица, "
+        "либо рег-код — затем нажмите «Искать в Ariregister», "
+        "чтобы подтянуть реквизиты автоматически. "
+        "Подсказки в выпадающем списке — из ранее заполнявшихся заказчиков."
+    ),
+) -> str | None:
+    """Unified client name combobox + Ariregister search in one row.
+
+    Replaces the previous two-input UX (separate `combobox` for name +
+    `company_picker` for Ariregister search). The same selectbox value
+    drives both: pick from suggestions OR type a new name/reg-code, then
+    one click on «Искать в Ariregister» searches the registry. Picking a
+    saved suggestion still triggers `autofill_from_picker` upstream;
+    clicking an Ariregister hit calls `on_apply(hit)`.
+
+    Returns the typed/selected name (or None if blank).
+    """
+    state_key = f"_co_search_{state_key_prefix}"
+
+    options = sorted({*suggestions, current_name} - {None, ""})
+    initial = current_name if current_name in options else (current_name or None)
+
+    cols = st.columns([5, 2, 2], vertical_alignment="bottom")
+    try:
+        result = cols[0].selectbox(
+            "Название / имя или рег-код заказчика",
+            options=options,
+            index=options.index(initial) if initial in options else None,
+            key=name_widget_key,
+            help=help_text,
+            placeholder="Введите название, рег-код или выберите из существующих…",
+            accept_new_options=True,
+        )
+    except TypeError:
+        # Older Streamlit without accept_new_options — fall back to text_input.
+        result = cols[0].text_input(
+            "Название / имя или рег-код заказчика",
+            value=current_name or "",
+            key=name_widget_key,
+            help=help_text,
+        ) or None
+
+    do_search = cols[1].button(
+        "🔎 Искать в Ariregister",
+        key=f"{state_key}_btn",
+        use_container_width=True,
+        help=(
+            "Ariregister — официальный реестр RIK. Использует значение "
+            "поля слева как запрос. Кэш 7 дней."
+        ),
+    )
+    do_clear = cols[2].button(
+        "Очистить",
+        key=f"{state_key}_clear",
+        use_container_width=True,
+        disabled=state_key not in st.session_state,
+    )
+
+    if do_clear:
+        st.session_state.pop(state_key, None)
+        st.rerun()
+
+    if do_search:
+        q = (result or "").strip() if isinstance(result, str) else ""
+        if len(q) < 2:
+            st.warning("Введите минимум 2 символа в поле слева.")
+        else:
+            hits = search_company(q)
+            st.session_state[state_key] = [_co_to_state(h) for h in hits]
+
+    hits_state = st.session_state.get(state_key)
+    if hits_state:
+        st.caption(f"Найдено в Ariregister: {len(hits_state)}. Выберите компанию:")
+        for i, h_state in enumerate(hits_state):
+            h = _state_to_company(h_state)
+            line = f"{h.name} · {h.reg_code}"
+            if h.legal_form:
+                line = f"{line} · {h.legal_form}"
+            if h.status_label and h.status != "R":
+                line = f"{line} · {h.status_label}"
+            if h.address:
+                line = f"{line}\n📍 {h.address}"
+            if st.button(
+                line,
+                key=f"{state_key}_pick_{i}",
+                use_container_width=True,
+            ):
+                on_apply(h)
+    elif hits_state == []:
+        st.caption(":orange[Ничего не найдено в Ariregister.]")
+
+    if isinstance(result, str):
+        return result.strip() or None
+    return result
+
+
 def _co_to_state(h: CompanyHit) -> dict:
     return {
         "reg_code": h.reg_code,

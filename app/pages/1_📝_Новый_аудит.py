@@ -24,10 +24,11 @@ from app._state import (  # noqa: E402
     start_new_draft,
 )
 from app._widgets import (  # noqa: E402
+    _PENDING_PREFIX,
     address_picker,
     autofill_from_picker,
+    client_picker,
     combobox,
-    company_picker,
     flush_improve_pending,
     hint_caption,
     improve_button_for,
@@ -453,13 +454,81 @@ if audit.client is None:
     from tadf.models import Client
 
     audit.client = Client(name="")
-audit.client.name = combobox(
-    "Название / имя",
+
+
+def _apply_to_client(payload: dict, *, rerun_scope: str | None = None) -> None:
+    """Apply external client data (Ariregister hit or Teatmik import) to
+    the audit.client model AND seed the corresponding widget keys via the
+    pending-widget queue so values appear in the form immediately on the
+    next rerun — no «leave the page and come back» dance.
+
+    Pending writes flow through `flush_improve_pending()` at the page top,
+    same path used by the «✨ Улучшить» accept buttons and
+    `autofill_from_picker`. Streamlit-safe across reruns and across the
+    `scope` ("new" → audit.id) flip on the first save.
+    """
+    if audit.client is None:
+        from tadf.models import Client as _Client
+        audit.client = _Client(name="")
+    if payload.get("name"):
+        audit.client.name = payload["name"]
+    if payload.get("reg_code"):
+        audit.client.reg_code = payload["reg_code"]
+    if payload.get("address"):
+        audit.client.address = payload["address"]
+    if payload.get("contact_email") or payload.get("email"):
+        audit.client.contact_email = payload.get("contact_email") or payload.get("email")
+    if payload.get("contact_phone") or payload.get("phone"):
+        audit.client.contact_phone = payload.get("contact_phone") or payload.get("phone")
+
+    set_current(audit)
+    ensure_draft_saved(audit)  # mirrors into DirectoryClientRow + assigns audit.id
+
+    # Re-scope here in case ensure_draft_saved just promoted a fresh draft
+    # (audit.id went None → number). The widgets in the *next* render will
+    # use this new scope for their keys, so the pending writes must too.
+    _scope = audit.id or "new"
+    queued = {
+        f"a_{_scope}_client_name":  audit.client.name or "",
+        f"a_{_scope}_client_reg":   audit.client.reg_code or "",
+        f"a_{_scope}_client_email": audit.client.contact_email or "",
+        f"a_{_scope}_client_phone": audit.client.contact_phone or "",
+        f"a_{_scope}_client_addr":  audit.client.address or "",
+    }
+    for widget_key, value in queued.items():
+        st.session_state[f"{_PENDING_PREFIX}{widget_key}"] = value
+
+    # Collapse the Ariregister results panel after applying.
+    st.session_state.pop(f"_co_search_client_{scope}", None)
+
+    if rerun_scope:
+        st.rerun(scope=rerun_scope)
+    else:
+        st.rerun()
+
+
+def _apply_company_hit(hit) -> None:  # type: CompanyHit
+    _apply_to_client({
+        "name": hit.name,
+        "reg_code": hit.reg_code,
+        "address": hit.address,
+    })
+
+
+# (1) Unified picker — single combobox + Ariregister search button. Sits
+# right under the Заказчик header so the auditor types name OR reg-code
+# in one place; saved-client picks autofill via `autofill_from_picker`
+# above; Ariregister hits fill all fields via `_apply_to_client`.
+audit.client.name = client_picker(
+    name_widget_key=k("client_name"),
+    state_key_prefix=f"client_{scope}",
     suggestions=client_names(),
-    value=audit.client.name,
-    key=k("client_name"),
-    help="Название организации или ФИО физ. лица. Подсказки — из прошлых аудитов.",
+    current_name=audit.client.name,
+    on_apply=_apply_company_hit,
 ) or ""
+
+# (2) Sibling fields — auto-filled by `_apply_to_client` (Ariregister/
+# Teatmik) and `autofill_from_picker` (saved-client pick).
 col1, col2, col3 = st.columns(3)
 with col1:
     audit.client.reg_code = st.text_input(
@@ -477,11 +546,15 @@ with col3:
     audit.client.contact_phone = st.text_input(
         "Телефон", value=audit.client.contact_phone or "", key=k("client_phone")
     ) or None
+
+
 def _apply_inads_to_client(hit) -> None:  # type: AddressHit
     audit.client.address = hit.address
     set_current(audit)
-    # Force the text_input below to reseed from the new model value.
-    st.session_state.pop(k("client_addr"), None)
+    # Seed the address text_input via the pending-widget queue so the
+    # value shows up immediately on the next rerun (same pattern as the
+    # other client fields above).
+    st.session_state[f"{_PENDING_PREFIX}{k('client_addr')}"] = audit.client.address or ""
     st.session_state.pop(f"_addr_search_client_{scope}", None)
     st.session_state.pop(f"_addr_q_client_{scope}", None)
     st.rerun()
@@ -514,39 +587,8 @@ improve_button_for(
 # have rendered and committed their values. As soon as the user types
 # anything (purpose, client name, reg-code, etc.) audit.id is assigned —
 # token-based features (Teatmik link, pending-imports) start working
-# immediately, no manual «Save draft» click required. We DON'T rotate
-# `scope` mid-render to avoid widget-key drift; values are preserved via
-# the model on the next render's `value=` parameter.
+# immediately, no manual «Save draft» click required.
 ensure_draft_saved(audit)
-
-# Ariregister company picker — primary path. Replaces the Teatmik
-# bookmarklet flow with a one-click in-app search against the official
-# RIK autocomplete API (no auth, no CAPTCHA).
-
-
-def _apply_company_to_client(hit) -> None:  # type: CompanyHit
-    if audit.client is None:
-        from tadf.models import Client as _Client
-        audit.client = _Client(name="")
-    audit.client.name = hit.name
-    audit.client.reg_code = hit.reg_code
-    if hit.address:
-        audit.client.address = hit.address
-    set_current(audit)
-    # Reseed any widgets we just changed.
-    for w in (k("client_name"), k("client_reg"), k("client_addr")):
-        st.session_state.pop(w, None)
-    # Collapse the picker.
-    st.session_state.pop(f"_co_search_client_{scope}", None)
-    st.session_state.pop(f"_co_q_client_{scope}", None)
-    st.rerun()
-
-
-company_picker(
-    key_prefix=f"client_{scope}",
-    on_select=_apply_company_to_client,
-    label="🔎 Найти заказчика в Ariregister",
-)
 
 # Optional fallback — the old Teatmik bookmarklet/userscript flow remains
 # fully functional behind a feature flag (see «Подключения» page). Hidden
@@ -554,11 +596,10 @@ company_picker(
 # attention but stays one click away if Ariregister ever fails.
 if feature_flags.teatmik_enabled():
     with st.expander("🌐 Альтернативный источник: Teatmik (резерв)", expanded=False):
-        # Single search query: prefer (in order) the Ariregister picker's
-        # typed text, the client model's reg_code, then client name. So
-        # the auditor doesn't have to retype "TADF" twice.
+        # The unified picker stores its name/reg-code in `k("client_name")`
+        # — re-use that as the Teatmik query so the auditor doesn't retype.
         _tk_query = (
-            (st.session_state.get(f"_co_q_client_{scope}") or "").strip()
+            (st.session_state.get(k("client_name")) or "").strip()
             or (audit.client.reg_code or "").strip()
             or (audit.client.name or "").strip()
         )
@@ -626,28 +667,11 @@ def _render_pending_client_imports() -> None:
                     st.write(f"- `{kfield}`: {val}")
             ca, cr = st.columns([1, 1])
             if ca.button("✅ Применить к клиенту", type="primary", key=f"imp_client_apply_{imp.id}"):
-                if audit.client is None:
-                    from tadf.models import Client as _Client
-                    audit.client = _Client(name="")
-                if mapped.get("name"):
-                    audit.client.name = mapped["name"]
-                if mapped.get("reg_code"):
-                    audit.client.reg_code = mapped["reg_code"]
-                if mapped.get("address"):
-                    audit.client.address = mapped["address"]
-                if mapped.get("email"):
-                    audit.client.contact_email = mapped["email"]
-                if mapped.get("phone"):
-                    audit.client.contact_phone = mapped["phone"]
-                set_current(audit)
-                # Pop widget keys so client form re-seeds from new model values.
-                for w in (
-                    k("client_name"), k("client_reg"), k("client_email"),
-                    k("client_phone"), k("client_addr"),
-                ):
-                    st.session_state.pop(w, None)
                 mark_applied(imp.id)
-                st.rerun(scope="app")
+                # Same path as the Ariregister picker — guarantees fields
+                # appear in the form on the next rerun. `rerun_scope="app"`
+                # because we're inside an @st.fragment.
+                _apply_to_client(mapped, rerun_scope="app")
             if cr.button("❌ Отклонить", key=f"imp_client_reject_{imp.id}"):
                 mark_rejected(imp.id)
                 st.rerun(scope="app")
