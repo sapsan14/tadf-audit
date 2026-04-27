@@ -24,7 +24,7 @@ from tadf.api.imports import (  # noqa: E402
     mark_rejected,
 )
 from tadf.api.tokens import issue as _issue_token  # noqa: E402
-from tadf.external.ehr_client import lookup_ehr  # noqa: E402
+from tadf.external.ehr_client import lookup_ehr, search_ehr  # noqa: E402
 from tadf.external.links import maaamet_kataster_url, teatmik_company_url  # noqa: E402
 from tadf.intake.document_extract import (  # noqa: E402
     LibreofficeMissing,
@@ -442,8 +442,10 @@ ehr_pull = lc1.button(
     key=f"ehr_pull_{scope}",
     use_container_width=True,
     help=(
-        "Идёт прямо на livekluster.ehr.ee/api — без логина, без браузера. "
-        "Кешируется на 30 дней; кнопка «🔄 Свежие из EHR» обновляет принудительно."
+        "Использует EHR-код, если задан; иначе кадастровый номер — "
+        "найдёт здание(я) на участке через "
+        "livekluster.ehr.ee/api/geoinfo и подтянет первое. "
+        "Без логина, без браузера. Кеш 30 дней; «🔄 Свежие из EHR» бьёт мимо кеша."
     ),
 )
 ehr_refresh = lc2.button(
@@ -478,11 +480,57 @@ else:
     )
 
 if ehr_pull or ehr_refresh:
-    if not _ehr_code_now:
-        st.warning("Сначала введите EHR-код в поле выше.")
+    # Resolve which key to look up by. Priority:
+    #   1. EHR code (digits) — direct API call
+    #   2. Kataster (with `:` separator) — search EHR for buildings on
+    #      that cadastre, then look up the first match. Multi-building
+    #      cases get all alternatives saved in session_state for the
+    #      auditor to pick from.
+    _ehr_code_now = (b.ehr_code or "").strip()
+    _kataster_now = (b.kataster_no or "").strip()
+    resolved_ehr_code: str | None = _ehr_code_now or None
+
+    if not resolved_ehr_code and _kataster_now:
+        with st.status(
+            f"Ищу здания на кадастре {_kataster_now}…", expanded=True
+        ) as status:
+            hits = search_ehr(_kataster_now)
+            building_hits = [h for h in hits if h.object_type == "EHR_KOOD"]
+            if not building_hits:
+                status.update(
+                    label="На этом кадастре зданий в EHR не найдено ❌",
+                    state="error",
+                )
+            else:
+                resolved_ehr_code = building_hits[0].ehr_code
+                if len(building_hits) == 1:
+                    status.update(
+                        label=f"Нашёл одно здание: EHR {resolved_ehr_code}",
+                        state="complete",
+                        expanded=False,
+                    )
+                else:
+                    status.update(
+                        label=(
+                            f"Нашёл {len(building_hits)} зданий на кадастре. "
+                            f"Загружаю первое (EHR {resolved_ehr_code}); "
+                            "остальные см. в expander'е под полями."
+                        ),
+                        state="complete",
+                        expanded=False,
+                    )
+                    # Stash alternatives for the UI panel below.
+                    st.session_state[f"_ehr_alts_{scope}"] = [
+                        {"ehr_code": h.ehr_code, "address": h.address, "use_purpose": h.use_purpose}
+                        for h in building_hits[1:]
+                    ]
+
+    if not resolved_ehr_code:
+        if not _ehr_code_now and not _kataster_now:
+            st.warning("Сначала введите EHR-код или кадастровый номер выше.")
     else:
         with st.status("Тяну из EHR (livekluster.ehr.ee)…", expanded=True) as status:
-            result = lookup_ehr(_ehr_code_now, force_refresh=ehr_refresh)
+            result = lookup_ehr(resolved_ehr_code, force_refresh=ehr_refresh)
             if result:
                 st.session_state[_EHR_RESULT_KEY] = result
                 status.update(
@@ -493,6 +541,40 @@ if ehr_pull or ehr_refresh:
             else:
                 status.update(label="Не нашёл такого здания в EHR ❌", state="error")
         st.rerun()
+
+# When the kataster lookup found multiple buildings, surface the
+# alternatives so the auditor can switch to a different one.
+_alts_key = f"_ehr_alts_{scope}"
+if _alts_key in st.session_state and st.session_state[_alts_key]:
+    with st.expander(
+        f"🏘️ На том же кадастре ещё {len(st.session_state[_alts_key])} здание(й) "
+        "— переключиться?",
+        expanded=False,
+    ):
+        for alt in st.session_state[_alts_key]:
+            ac1, ac2 = st.columns([5, 2])
+            ac1.markdown(
+                f"**EHR {alt['ehr_code']}** · {alt.get('use_purpose') or '?'}  \n"
+                f"<small>{alt.get('address') or ''}</small>",
+                unsafe_allow_html=True,
+            )
+            if ac2.button(
+                "Загрузить",
+                key=f"ehr_alt_{scope}_{alt['ehr_code']}",
+                use_container_width=True,
+            ):
+                with st.status(
+                    f"Загружаю EHR {alt['ehr_code']}…", expanded=False
+                ) as status:
+                    alt_result = lookup_ehr(alt["ehr_code"])
+                    if alt_result:
+                        st.session_state[_EHR_RESULT_KEY] = alt_result
+                        status.update(label="Готово ✅", state="complete")
+                    else:
+                        status.update(
+                            label="Не удалось загрузить", state="error"
+                        )
+                st.rerun()
 
 if _EHR_RESULT_KEY in st.session_state:
     ehr_data = st.session_state[_EHR_RESULT_KEY]
@@ -732,7 +814,14 @@ with col1:
     ) or None
     if feature_flags.teatmik_enabled():
         with st.expander("🌐 Альтернативно: Teatmik (designer)", expanded=False):
-            _designer_link = teatmik_company_url(b.designer) if b.designer else None
+            # Read the same search box the Ariregister picker writes to,
+            # then fall back to the model field. Saves the auditor from
+            # retyping the company name in two places.
+            _d_query = (
+                (st.session_state.get(f"_co_q_designer_{scope}") or "").strip()
+                or (b.designer or "").strip()
+            )
+            _designer_link = teatmik_company_url(_d_query) if _d_query else None
             if _designer_link:
                 if audit.id is not None:
                     _designer_link = _with_token_fragment(
@@ -747,8 +836,8 @@ with col1:
                     disabled=True,
                     key=f"teatmik_designer_disabled_{scope}",
                     help=(
-                        "Введите имя проектировщика выше — "
-                        "ссылка на Teatmik активируется."
+                        "Введите имя проектировщика в поле Ariregister выше — "
+                        "ссылка на Teatmik активируется автоматически."
                     ),
                     use_container_width=True,
                 )
@@ -769,7 +858,11 @@ with col2:
     ) or None
     if feature_flags.teatmik_enabled():
         with st.expander("🌐 Альтернативно: Teatmik (builder)", expanded=False):
-            _builder_link = teatmik_company_url(b.builder) if b.builder else None
+            _b_query = (
+                (st.session_state.get(f"_co_q_builder_{scope}") or "").strip()
+                or (b.builder or "").strip()
+            )
+            _builder_link = teatmik_company_url(_b_query) if _b_query else None
             if _builder_link:
                 if audit.id is not None:
                     _builder_link = _with_token_fragment(

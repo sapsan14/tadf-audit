@@ -64,11 +64,11 @@ def address_picker(
     key_prefix: str,
     on_select: Callable[[AddressHit], None],
     label: str = "🔎 Поиск адреса в Maa-amet (in-ADS)",
-    placeholder: str = "Например: Auga 8 Narva-Jõesuu или Tartu mnt 84a",
+    placeholder: str = "Адрес или кадастр (Auga 8, Narva-Jõesuu или 85101:004:0020)",
     help_text: str | None = (
-        "Печатаете часть адреса (минимум 2 символа) и жмёте «Искать». "
-        "in-ADS — официальный адресный регистр Эстонии (Maa-amet), "
-        "результаты — нормализованный адрес + кадастровый номер. "
+        "Печатаете часть адреса ИЛИ кадастровый номер (формата XXXXX:XXX:XXXX) "
+        "и жмёте «Искать». in-ADS — официальный адресный регистр Эстонии "
+        "(Maa-amet), результаты — нормализованный адрес + кадастровый номер. "
         "Кэш на 30 дней — повторные поиски работают офлайн."
     ),
 ) -> None:
@@ -102,11 +102,15 @@ def address_picker(
         help=help_text,
         label_visibility="collapsed",
     )
+    # Buttons are ALWAYS enabled — clicking them triggers blur on the
+    # text_input above, which commits the typed value to session_state
+    # and triggers a rerun before the click handler runs. So the latest
+    # typed text is always available here without forcing the auditor
+    # to press Tab/Enter first.
     do_search = cols[1].button(
         "Искать",
         key=f"{state_key}_btn",
         use_container_width=True,
-        disabled=len((query or "").strip()) < 2,
     )
     do_clear = cols[2].button(
         "Очистить",
@@ -121,8 +125,12 @@ def address_picker(
         st.rerun()
 
     if do_search:
-        hits = search_address(query)
-        st.session_state[state_key] = [_hit_to_state(h) for h in hits]
+        q = (query or "").strip()
+        if len(q) < 2:
+            st.warning("Введите минимум 2 символа.")
+        else:
+            hits = search_address(q)
+            st.session_state[state_key] = [_hit_to_state(h) for h in hits]
 
     hits_state = st.session_state.get(state_key)
     if not hits_state:
@@ -181,11 +189,13 @@ def company_picker(
         help=help_text,
         label_visibility="collapsed",
     )
+    # Buttons always enabled (same rationale as address_picker) — the
+    # click triggers blur+commit on the text_input above, so the
+    # auditor doesn't have to Tab out before clicking.
     do_search = cols[1].button(
         "Искать",
         key=f"{state_key}_btn",
         use_container_width=True,
-        disabled=len((query or "").strip()) < 2,
     )
     do_clear = cols[2].button(
         "Очистить",
@@ -200,8 +210,12 @@ def company_picker(
         st.rerun()
 
     if do_search:
-        hits = search_company(query)
-        st.session_state[state_key] = [_co_to_state(h) for h in hits]
+        q = (query or "").strip()
+        if len(q) < 2:
+            st.warning("Введите минимум 2 символа.")
+        else:
+            hits = search_company(q)
+            st.session_state[state_key] = [_co_to_state(h) for h in hits]
 
     hits_state = st.session_state.get(state_key)
     if not hits_state:
