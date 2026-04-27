@@ -62,17 +62,15 @@ def test_teatmik_empty_returns_none() -> None:
     assert teatmik_company_url("   ") is None
 
 
-def test_maaamet_url_uses_kataster_ee() -> None:
+def test_maaamet_url_uses_ky_kataster_ee() -> None:
     url = maaamet_kataster_url("85101:004:0020")
     assert url is not None
-    # Must hit the new official MaRu cadastre portal at kataster.ee.
-    # The earlier xgis2/page/app/maainfo?KAT_TUNNUS=… loaded the SPA shell
-    # but never actually navigated to the parcel; kataster.ee/?nr=…
-    # is the canonical query-string form that propagates into the EST/ENG
-    # language switcher (proof it's a server-recognised parameter).
-    assert url.startswith("https://kataster.ee/?nr=")
-    # `:` must be percent-encoded inside the value
-    assert "85101%3A004%3A0020" in url
+    # «Kiirpäring katastrist» — the quick-lookup SPA on a dedicated
+    # subdomain that consumes katastritunnus from the path segment.
+    # Format documented verbatim by Maa-amet on the geoportaal page.
+    # The earlier `kataster.ee/?nr=…` was the homepage and ignored the
+    # query string; xgis2 variants only loaded the SPA shell.
+    assert url == "https://ky.kataster.ee/ky/85101:004:0020"
 
 
 def test_maaamet_url_none_for_empty_input() -> None:

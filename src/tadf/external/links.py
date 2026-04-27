@@ -54,25 +54,33 @@ def teatmik_company_url(query: str) -> str | None:
 
 
 def maaamet_kataster_url(kataster_no: str | None) -> str | None:
-    """Deep link to the official cadastre portal `kataster.ee`,
-    pre-filled with the katastritunnus.
+    """Deep link to «Kiirpäring katastrist» (quick parcel lookup) on the
+    official Maa- ja Ruumiamet portal, pre-filled with the katastritunnus.
 
-    History:
-      - Legacy `geoportaal.maaamet.ee/.../Kinnistu-otsing-p82.html?otsing=…`
-        silently redirects and drops the query string.
+    Format: `https://ky.kataster.ee/ky/<katastritunnus>` with literal `:`
+    separators (NOT percent-encoded). This is the verbatim example given
+    by Maa-amet: «Katastriüksuse kiirpäringu tulemust on võimalik jagada
+    lingi kaudu, lisades aadressi lõppu katastriüksuse tunnuse. Näide
+    kiirpäringu tulemusest — https://ky.kataster.ee/ky/79501:027:0011»
+    (geoportaal.maaamet.ee/est/teenused/kiirparing-maakatastrist-p123.html).
+
+    History — what we tried before:
+      - `geoportaal.maaamet.ee/.../Kinnistu-otsing-p82.html?otsing=…`
+        silently redirected and dropped the query string.
       - `xgis.maaamet.ee/xgis2/page/app/maainfo?KAT_TUNNUS=…&ALAJAOTUS=…`
-        and its variants (KU=, TUNNUS=, ?, #) all loaded the SPA shell but
-        never actually navigated to the parcel — Fjodor confirmed this on
-        the deployed app («открывает только главную»).
-      - `kataster.ee/?nr=…` is the new official Maa- ja Ruumiamet (MaRu)
-        cadastre portal that DOES accept a query-string lookup. The HTML
-        propagates `?nr=` even into the EST/ENG language switcher links,
-        which is the strong signal that it's the canonical pattern.
+        and friends loaded the SPA shell but never navigated to the parcel.
+      - `kataster.ee/?nr=…` — the homepage just rendered the home view
+        and ignored the query string entirely (Fjodor confirmed: «открывает
+        главную»). The `?nr=` did NOT trigger the quick-lookup widget.
+        `ky.kataster.ee/ky/<tunnus>` is the actual subdomain that hosts
+        the «Kiirpäring» SPA and consumes the path segment as input.
     """
     k = (kataster_no or "").strip()
     if not k:
         return None
-    return f"https://kataster.ee/?nr={quote(k)}"
+    # `safe=":"` preserves the literal colons that the path-segment
+    # form requires; quote() still encodes anything else dodgy.
+    return f"https://ky.kataster.ee/ky/{quote(k, safe=':')}"
 
 
 def maaamet_xgis_kataster_url(kataster_no: str | None) -> str | None:
