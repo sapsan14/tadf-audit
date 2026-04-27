@@ -10,6 +10,20 @@ import os
 import streamlit as st
 
 from app._state import all_saved_audits
+from tadf.external.prewarm import warm_all_async
+
+
+@st.cache_resource
+def _start_prewarm():
+    """Refresh Ariregister + In-ADS caches in the background once per
+    python process. Daemon thread — never blocks UI, never holds up
+    Streamlit shutdown. Errors are swallowed inside the worker so a
+    flaky network at startup just means the cache stays whatever it
+    already was."""
+    return warm_all_async()
+
+
+_start_prewarm()
 
 st.title("TADF — Помощник аудитора")
 st.markdown(

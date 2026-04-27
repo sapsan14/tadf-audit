@@ -7,15 +7,25 @@ from datetime import date
 
 import streamlit as st
 
-from tadf.db.repo import delete_audit, list_audits, list_drafts, load_audit, upsert_audit
+from tadf.db.repo import (
+    delete_audit,
+    list_audits,
+    list_drafts,
+    load_audit,
+    next_seq_no,
+    upsert_audit,
+)
 from tadf.db.session import session_scope
 from tadf.models import Audit, Auditor, Building, Client
 
 
 def _new_audit() -> Audit:
+    year = date.today().year
+    with session_scope() as s:
+        seq_no = next_seq_no(s, year)
     return Audit(
-        seq_no=1,
-        year=date.today().year,
+        seq_no=seq_no,
+        year=year,
         type="EA",
         subtype="kasutuseelne",
         visit_date=date.today(),
