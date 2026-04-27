@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import func
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from tadf.db.orm import (
     AuditorRow,
     AuditRow,
+    AuditSnapshotRow,
     BuildingRow,
     ClientRow,
     FindingRow,
@@ -331,5 +332,82 @@ def delete_audit(s: Session, audit_id: int) -> None:
     row = s.get(AuditRow, audit_id)
     if row is None:
         return
+    # AuditRow's cascade covers findings + photos; snapshots have their
+    # own ondelete=CASCADE FK, but SQLite-on-Python often skips that
+    # without `PRAGMA foreign_keys=ON`. Delete snapshots explicitly so
+    # we don't leak orphans either way.
+    s.execute(delete(AuditSnapshotRow).where(AuditSnapshotRow.audit_id == audit_id))
     s.delete(row)
     s.flush()
+
+
+# ---------------------------------------------------------------------------
+# Audit history (snapshots) — see tadf.db.orm.AuditSnapshotRow
+# ---------------------------------------------------------------------------
+
+# Maximum snapshots kept per audit. Older versions are dropped from the
+# bottom on each new save. 30 ≈ a couple of weeks of "every meaningful
+# edit" for an actively-edited draft.
+SNAPSHOT_LIMIT = 30
+
+
+def save_snapshot(s: Session, audit_id: int, snapshot_json: str) -> int:
+    """Append a new snapshot for `audit_id`. Returns the new version_no.
+    Caps the total at SNAPSHOT_LIMIT by deleting the oldest beyond that
+    in the same transaction."""
+    last_version = (
+        s.execute(
+            select(func.max(AuditSnapshotRow.version_no)).where(
+                AuditSnapshotRow.audit_id == audit_id
+            )
+        ).scalar()
+        or 0
+    )
+    new_version = last_version + 1
+    s.add(
+        AuditSnapshotRow(
+            audit_id=audit_id,
+            version_no=new_version,
+            snapshot_json=snapshot_json,
+        )
+    )
+    # Flush so the new row is visible to the cap query below; without
+    # this, offset(LIMIT) only sees the pre-insert rows and the table
+    # creeps up by one each call.
+    s.flush()
+    # Drop oldest beyond the limit.
+    stale_ids = s.execute(
+        select(AuditSnapshotRow.id)
+        .where(AuditSnapshotRow.audit_id == audit_id)
+        .order_by(AuditSnapshotRow.version_no.desc())
+        .offset(SNAPSHOT_LIMIT)
+    ).scalars().all()
+    if stale_ids:
+        s.execute(
+            delete(AuditSnapshotRow).where(AuditSnapshotRow.id.in_(stale_ids))
+        )
+    s.flush()
+    return new_version
+
+
+def list_snapshots(s: Session, audit_id: int) -> list[AuditSnapshotRow]:
+    """Newest-first list of all snapshots for an audit."""
+    return list(
+        s.execute(
+            select(AuditSnapshotRow)
+            .where(AuditSnapshotRow.audit_id == audit_id)
+            .order_by(AuditSnapshotRow.version_no.desc())
+        ).scalars()
+    )
+
+
+def load_snapshot(s: Session, snapshot_id: int) -> Audit | None:
+    """Return the Audit Pydantic model from a snapshot row, or None if
+    the row is missing or the JSON is malformed."""
+    row = s.get(AuditSnapshotRow, snapshot_id)
+    if row is None:
+        return None
+    try:
+        return Audit.model_validate_json(row.snapshot_json)
+    except Exception:
+        return None

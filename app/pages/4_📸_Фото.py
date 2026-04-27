@@ -12,9 +12,10 @@ from pathlib import Path  # noqa: E402
 
 import streamlit as st  # noqa: E402
 
-from app._state import get_current, set_current  # noqa: E402
+from app._state import ensure_draft_saved, get_current, set_current  # noqa: E402
 from app._widgets import flush_improve_pending, improve_button_for  # noqa: E402
 from tadf.config import AUDITS_DIR  # noqa: E402
+from tadf.intake.photo_ingest import extract_exif  # noqa: E402
 from tadf.llm import caption_photo  # noqa: E402
 from tadf.llm import is_available as llm_available  # noqa: E402
 from tadf.models import Photo  # noqa: E402
@@ -65,18 +66,26 @@ if uploaded:
             ext = Path(f.name).suffix
             target = photos_dir / f"{sha}{ext}"
             target.write_bytes(data)
+            # Pull EXIF (taken_at + GPS) so the gallery can sort by
+            # capture time and we can later cross-check against
+            # audit.visit_date / drop a map pin.
+            exif = extract_exif(data)
             audit.photos.append(
                 Photo(
                     path=str(target),
                     sha256=sha,
                     section_ref=default_section,
                     caption_auditor=f.name,
+                    taken_at=exif.get("taken_at"),
+                    gps_lat=exif.get("gps_lat"),
+                    gps_lon=exif.get("gps_lon"),
                 )
             )
             existing.add(sha)
             new_count += 1
         progress.empty()
         set_current(audit)
+        ensure_draft_saved(audit)  # persist the new photo rows immediately
         if skipped:
             st.success(
                 f"Сохранено {new_count} фото · пропущено {skipped} дубликат(а/ов)"
@@ -103,9 +112,73 @@ if PHOTO_ERROR_KEY in st.session_state:
             del st.session_state[PHOTO_ERROR_KEY]
             st.rerun()
 
+# Sort gallery by EXIF `taken_at` when present so the order matches
+# how the auditor walked the site, regardless of upload order. Photos
+# without EXIF dates sort to the end (insertion order).
+_indexed_photos = list(enumerate(audit.photos))
+_indexed_photos.sort(
+    key=lambda iv: (iv[1].taken_at is None, iv[1].taken_at or 0, iv[0])
+)
+
+# Bulk caption — process every photo whose caption is still the raw
+# upload filename (fresh upload) or empty. Each one is a separate
+# Haiku 4.5 call; cached, so repeated runs are free.
+_uncaptioned_count = sum(
+    1 for _, p in _indexed_photos
+    if not p.caption_auditor
+    or p.caption_auditor.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+)
+if llm_on and _uncaptioned_count > 0:
+    with st.container(border=True):
+        st.markdown(
+            f"🤖 **Подписать пачку** — {_uncaptioned_count} фото без эстонской подписи "
+            "(имя файла или пусто). Haiku 4.5 предложит подпись + раздел "
+            "для каждого; перезапишет текущее значение."
+        )
+        if st.button(
+            f"🤖 Подписать все ({_uncaptioned_count})",
+            type="primary",
+            key="batch_caption_run",
+        ):
+            done = 0
+            errors = 0
+            with st.status(f"Haiku 4.5 описывает {_uncaptioned_count} фото…", expanded=True) as status:
+                for i, p in _indexed_photos:
+                    if (
+                        p.caption_auditor
+                        and not p.caption_auditor.lower().endswith(
+                            (".jpg", ".jpeg", ".png", ".webp")
+                        )
+                    ):
+                        continue
+                    path = Path(p.path)
+                    if not path.exists():
+                        continue
+                    st.write(f"#{i + 1}: {path.name}")
+                    try:
+                        result = caption_photo(path, auditor_note="")
+                        p.caption_auditor = result["caption"]
+                        p.section_ref = result["section_ref"]
+                        st.session_state[f"cap_{i}"] = result["caption"]
+                        st.session_state[f"sec_{i}"] = result["section_ref"]
+                        done += 1
+                    except Exception as e:  # noqa: BLE001
+                        errors += 1
+                        st.write(f"   ❌ {type(e).__name__}: {e}")
+                status.update(
+                    label=(
+                        f"Готово: {done} подписей" + (f", ошибок: {errors}" if errors else "")
+                    ),
+                    state="complete",
+                    expanded=False,
+                )
+            set_current(audit)
+            ensure_draft_saved(audit)
+            st.rerun()
+
 cols = st.columns(3)
-for i, p in enumerate(audit.photos):
-    with cols[i % 3]:
+for col_idx, (i, p) in enumerate(_indexed_photos):
+    with cols[col_idx % 3]:
         path = Path(p.path)
         if path.exists():
             st.image(

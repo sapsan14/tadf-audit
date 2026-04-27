@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+from datetime import date, datetime
 
 import streamlit as st
 
@@ -11,8 +11,11 @@ from tadf.db.repo import (
     delete_audit,
     list_audits,
     list_drafts,
+    list_snapshots,
     load_audit,
+    load_snapshot,
     next_seq_no,
+    save_snapshot,
     upsert_audit,
 )
 from tadf.db.session import session_scope
@@ -183,9 +186,40 @@ def ensure_draft_saved(audit: Audit) -> bool:
     if last_hash == current_hash and audit.id is not None:
         return False  # nothing changed since the last successful save
 
+    snapshot_json = audit.model_dump_json()
     with session_scope() as s:
         new_id = upsert_audit(s, audit)
+        # Write a history snapshot in the same transaction so a partial
+        # crash never leaves a save without its history entry.
+        save_snapshot(s, new_id, snapshot_json)
     audit.id = new_id
     set_current(audit)
     st.session_state[_AUTO_SAVE_HASH_KEY] = current_hash
+    return True
+
+
+def list_audit_snapshots(audit_id: int) -> list[tuple[int, int, datetime]]:
+    """Return [(snapshot_id, version_no, created_at)] newest-first.
+    Used by the Новый аудит page to render the «🕘 История» expander
+    without reading every snapshot's JSON upfront."""
+    with session_scope() as s:
+        rows = list_snapshots(s, audit_id)
+        return [(r.id, r.version_no, r.created_at) for r in rows]
+
+
+def restore_audit_snapshot(snapshot_id: int) -> bool:
+    """Replace `st.session_state["audit"]` with the audit deserialised
+    from the given snapshot. Returns False if the snapshot is missing /
+    malformed (caller shows an error). The next `ensure_draft_saved`
+    will then write a NEW snapshot of the restored state — so the
+    auditor can undo the restore by going to history again."""
+    with session_scope() as s:
+        restored = load_snapshot(s, snapshot_id)
+    if restored is None:
+        return False
+    st.session_state["audit"] = restored
+    st.session_state["loaded_id"] = restored.id
+    # Force the next ensure_draft_saved to actually save (write a new
+    # snapshot) instead of treating the restore as a no-op.
+    st.session_state.pop(_AUTO_SAVE_HASH_KEY, None)
     return True
